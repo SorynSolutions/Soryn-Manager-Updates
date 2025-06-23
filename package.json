@@ -1,0 +1,78 @@
+{
+  "name": "soryns-lobby-manager",
+  "version": "1.0.0",
+  "description": "Soryn's Lobby Manager",
+  "main": "index.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --debug",
+    "obfuscate": "node obfuscate.js",
+    "prebuild": "npm run obfuscate",
+    "build": "electron-builder",
+    "dist": "electron-builder --win"
+  },
+  "keywords": [
+    "electron",
+    "browserviews",
+    "multi-view"
+  ],
+  "author": "Soryn",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^1.9.0",
+    "discord-rpc": "^4.0.1",
+    "electron-store": "^8.1.0",
+    "electron-updater": "^6.6.2",
+    "lodash": "^4.17.21",
+    "systeminformation": "^5.21.0",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "electron": "^29.0.1",
+    "electron-builder": "^24.13.0",
+    "glob": "^10.3.10",
+    "ico-endec": "^0.1.6",
+    "javascript-obfuscator": "^4.1.1",
+    "sharp": "^0.34.1"
+  },
+  "build": {
+    "appId": "Soryn",
+    "productName": "Soryn's Lobby Manager",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "audioController.js",
+      "index.js",
+      "package-lock.json",
+      "package.json"
+    ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "SorynSolutions",
+        "repo": "Soryn-Manager-Updates",
+        "token": "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"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}.${ext}"
+    }
+  }
+}

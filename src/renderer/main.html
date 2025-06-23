@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Soryns Bot Lobby Manager</title>
+  <style>
+    html {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #1a1a2e;
+      color: white;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      position: relative;
+      -webkit-app-region: drag;
+      padding-top: 30px; /* Make space for the custom title bar */
+    }
+    
+    #title-bar-text {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 30px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-size: 14px;
+      pointer-events: none;
+    }
+    
+    body::before {
+      content: '';
+      position: absolute;
+      top: 30px; /* Start gradient below title bar */
+      left: 0;
+      width: 100%;
+      height: 300px;
+      background: linear-gradient(to bottom, rgba(124, 58, 237, 0.4), transparent);
+      z-index: 0;
+      pointer-events: none;
+    }
+    
+    #app {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .control-bar {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(30, 30, 46, 0.7);
+      backdrop-filter: blur(10px);
+      height: 70px;
+      padding: 0 30px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      z-index: 1000;
+      position: relative;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      -webkit-app-region: no-drag; /* Make sure controls are clickable */
+    }
+    
+    .control-bar .spacer {
+      flex-grow: 1;
+    }
+    
+    .control-bar span {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-right: 24px;
+      color: #fff;
+    }
+    
+    .control-btn, .sync-btn {
+      background: #7c3aed;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 10px 20px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      margin: 0 5px;
+    }
+    
+    .control-btn:hover, .sync-btn:hover {
+      background: #8b5cf6;
+      transform: translateY(-2px);
+      box-shadow: 0 6px 15px rgba(0, 0, 0, 0.2);
+    }
+    
+    .control-btn.active {
+      background: #8b5cf6;
+      box-shadow: 0 0 10px rgba(139, 92, 246, 0.5);
+    }
+    
+    #scroll-container {
+      flex: 1;
+      overflow: auto;
+      position: relative;
+      background: transparent;
+      padding: 0;
+      margin: 0;
+      -webkit-app-region: no-drag; /* Make sure views are interactive */
+    }
+    
+    #scroll-container::-webkit-scrollbar {
+      display: none; /* Chrome, Safari, Opera */
+    }
+    
+    #content-size-controller {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 1px;
+      pointer-events: none;
+    }
+    
+    /* Style for scroll indicators */
+    .scroll-indicator {
+      position: fixed;
+      right: 10px;
+      width: 8px;
+      border-radius: 4px;
+      z-index: 900;
+      transition: opacity 0.3s;
+    }
+    
+    .scroll-thumb {
+      background-color: rgba(225, 29, 72, 0.8);
+      position: fixed;
+      right: 10px;
+      width: 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      z-index: 900;
+      transition: opacity 0.3s;
+    }
+    
+    /* Styles for the settings modal window */
+    .modal-backdrop {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(5px);
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      visibility: hidden;
+      transition: all 0.3s ease;
+    }
+    
+    .modal-backdrop.show {
+      opacity: 1;
+      visibility: visible;
+    }
+    
+    .modal-content {
+      background: rgba(15, 23, 42, 0.9);
+      border-radius: 1rem;
+      padding: 2rem;
+      width: 90%;
+      max-width: 600px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      transform: translateY(-20px);
+      transition: all 0.3s ease;
+    }
+    
+    .modal-backdrop.show .modal-content {
+      transform: translateY(0);
+    }
+    
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.5rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      padding-bottom: 1rem;
+    }
+    
+    .modal-title {
+      font-size: 1.5rem;
+      font-weight: 600;
+      margin: 0;
+      background: linear-gradient(to right, #e11d48, #f43f5e);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+    
+    .modal-close {
+      background: none;
+      border: none;
+      color: white;
+      font-size: 1.5rem;
+      cursor: pointer;
+      padding: 0.5rem;
+      border-radius: 50%;
+      transition: all 0.2s ease;
+    }
+    
+    .modal-close:hover {
+      color: #e11d48;
+      background: rgba(255, 255, 255, 0.1);
+    }
+    
+    .modal-body {
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+    
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+    
+    label {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: white;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    
+    .form-control {
+      background-color: rgba(30, 41, 59, 0.8);
+      border: 2px solid rgba(255, 255, 255, 0.1);
+      border-radius: 0.5rem;
+      padding: 0.75rem 1rem;
+      color: white;
+      font-size: 1rem;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    }
+    
+    .form-control:hover, .form-control:focus {
+      border-color: #e11d48;
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(225, 29, 72, 0.25);
+    }
+    
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 10px;
+      background: rgba(30, 41, 59, 0.8);
+      border-radius: 0.5rem;
+      outline: none;
+      margin: 0.5rem 0;
+    }
+    
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 25px;
+      height: 25px;
+      border-radius: 50%;
+      background: #e11d48;
+      cursor: pointer;
+      box-shadow: 0 0 10px rgba(225, 29, 72, 0.5);
+      transition: all 0.2s ease;
+    }
+    
+    input[type="range"]::-webkit-slider-thumb:hover {
+      transform: scale(1.1);
+      background: #f43f5e;
+    }
+    
+    .bitrate-value {
+      background: linear-gradient(to right, #e11d48, #f43f5e);
+      padding: 0.25rem 0.75rem;
+      border-radius: 1rem;
+      font-weight: bold;
+      display: inline-block;
+      min-width: 2rem;
+      text-align: center;
+    }
+    
+    .modal-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 1rem;
+      margin-top: 2rem;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+      padding-top: 1rem;
+    }
+    
+    .btn-cancel, .btn-save {
+      padding: 0.75rem 1.5rem;
+      border-radius: 0.5rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+    
+    .btn-cancel {
+      background: rgba(30, 41, 59, 0.8);
+      color: white;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    
+    .btn-save {
+      background: linear-gradient(135deg, #e11d48, #be123c);
+      color: white;
+      border: none;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    }
+    
+    .btn-cancel:hover {
+      background: rgba(30, 41, 59, 1);
+    }
+    
+    .btn-save:hover {
+      background: linear-gradient(135deg, #f43f5e, #e11d48);
+      transform: translateY(-2px);
+    }
+    
+    .view-card {
+      background: #18181b;
+      border: 1.5px solid #b91c1c;
+      margin: 2px;
+      padding: 0;
+      border-radius: 0;
+      box-shadow: none;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      min-height: 0;
+    }
+    
+    .views-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 2px;
+      width: 100%;
+      height: 100%;
+      background: #000;
+      padding: 0;
+      margin: 0;
+    }
+    
+    /* Add this style for the multiplayer control bar container or iframe */
+    .multiplayer-controlbar-container, iframe#multiplayer-controlbar {
+      margin-bottom: 8px !important;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <div id="title-bar-text">Soryn's Bot Lobby Manager</div>
+  <div id="app">
+    <div class="control-bar">
+      <button id="auto-movement-btn" class="control-btn">Auto Movement: OFF</button>
+      <button id="mute-tabs-btn" class="control-btn">Mute Tabs</button>
+      <button id="settings-btn" class="control-btn">Select Region</button>
+      <button id="add-bot-btn" class="control-btn">+1 Bot</button>
+      <button id="update-btn" class="control-btn">Check for Update</button>
+    </div>
+    
+    <div id="scroll-container">
+      <div id="content-size-controller"></div>
+    </div>
+    
+    <!-- Custom scroll indicator -->
+    <div class="scroll-indicator scroll-thumb"></div>
+  </div>
+  
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      // New button elements
+      const autoMovementBtn = document.getElementById('auto-movement-btn');
+      const muteTabsBtn = document.getElementById('mute-tabs-btn');
+      const settingsBtn = document.getElementById('settings-btn');
+
+      // State variables
+      let isAutoMovementOn = false;
+      let areTabsMuted = false;
+
+      // Event listener for Auto Movement button
+      autoMovementBtn.addEventListener('click', () => {
+        isAutoMovementOn = !isAutoMovementOn;
+        autoMovementBtn.textContent = `Auto Movement: ${isAutoMovementOn ? 'ON' : 'OFF'}`;
+        autoMovementBtn.classList.toggle('active', isAutoMovementOn);
+        window.electronAPI.toggleRandomMovements(isAutoMovementOn);
+      });
+
+      // Event listener for Mute Tabs button
+      muteTabsBtn.addEventListener('click', () => {
+        areTabsMuted = !areTabsMuted;
+        muteTabsBtn.textContent = areTabsMuted ? 'Unmute Tabs' : 'Mute Tabs';
+        muteTabsBtn.classList.toggle('active', areTabsMuted);
+        window.electronAPI.toggleMute(areTabsMuted);
+      });
+
+      // Event listener for Select Region button (opens settings)
+      settingsBtn.addEventListener('click', () => {
+        window.electronAPI.openSettings();
+      });
+
+      // Add bot button
+      document.getElementById('add-bot-btn').addEventListener('click', () => {
+        window.electronAPI.addBot();
+      });
+
+      // Update button functionality
+      const updateBtn = document.getElementById('update-btn');
+      updateBtn.addEventListener('click', async () => {
+        updateBtn.textContent = 'Checking...';
+        updateBtn.disabled = true;
+        
+        try {
+          await window.electronAPI.checkForUpdate();
+        } catch (error) {
+          console.error('Error checking for updates:', error);
+          showUpdateMessage('Error checking for updates', 'error');
+          updateBtn.textContent = 'Check for Update';
+          updateBtn.disabled = false;
+        }
+      });
+
+      // Update event handlers
+      window.electronAPI.onUpdateAvailable(() => {
+        updateBtn.textContent = 'Downloading...';
+        showUpdateMessage('Update found! Downloading...', 'info');
+      });
+
+      window.electronAPI.onUpdateNotAvailable(() => {
+        updateBtn.textContent = 'Check for Update';
+        updateBtn.disabled = false;
+        showUpdateMessage('Latest version already installed', 'success');
+      });
+
+      window.electronAPI.onUpdateError((message) => {
+        updateBtn.textContent = 'Check for Update';
+        updateBtn.disabled = false;
+        showUpdateMessage(`Update error: ${message}`, 'error');
+      });
+
+      window.electronAPI.onUpdateDownloadProgress((progress) => {
+        const percent = Math.round(progress.percent);
+        updateBtn.textContent = `Downloading ${percent}%`;
+      });
+
+      // Function to show update messages
+      function showUpdateMessage(message, type = 'info') {
+        // Create a temporary notification
+        const notification = document.createElement('div');
+        notification.style.cssText = `
+          position: fixed;
+          top: 100px;
+          right: 20px;
+          padding: 15px 20px;
+          border-radius: 8px;
+          color: white;
+          font-weight: 600;
+          z-index: 10000;
+          max-width: 300px;
+          word-wrap: break-word;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+          transition: all 0.3s ease;
+          cursor: pointer;
+        `;
+        
+        // Set background color based on message type
+        switch (type) {
+          case 'success':
+            notification.style.background = '#10b981';
+            break;
+          case 'error':
+            notification.style.background = '#ef4444';
+            break;
+          case 'info':
+          default:
+            notification.style.background = '#3b82f6';
+            break;
+        }
+        
+        notification.textContent = message;
+        document.body.appendChild(notification);
+        
+        // Auto-remove after 5 seconds or on click
+        const removeNotification = () => {
+          notification.style.opacity = '0';
+          notification.style.transform = 'translateX(100%)';
+          setTimeout(() => {
+            if (notification.parentNode) {
+              notification.parentNode.removeChild(notification);
+            }
+          }, 300);
+        };
+        
+        notification.addEventListener('click', removeNotification);
+        setTimeout(removeNotification, 5000);
+      }
+
+      console.log('DOM loaded, initializing scroll system');
+      
+      // Check if the API is available
+      if (!window.electronAPI) {
+        console.error('Error: window.electronAPI is not available!');
+        alert('Communication error with the application');
+        return;
+      } else {
+        console.log('Electron API detected:', Object.keys(window.electronAPI));
+      }
+      
+      const scrollContainer = document.getElementById('scroll-container');
+      const contentController = document.getElementById('content-size-controller');
+      const scrollThumb = document.querySelector('.scroll-thumb');
+      
+      // Check that elements exist
+      if (!scrollContainer || !contentController || !scrollThumb) {
+        console.error('Error: Missing DOM elements!');
+        return;
+      }
+      
+      // Variables for scroll management
+      let isScrolling = false;
+      let scrollTimeout = null;
+      let isDraggingThumb = false;
+      let lastY = 0;
+      
+      // Handler for scroll events
+      scrollContainer.addEventListener('scroll', (event) => {
+        console.log('Scroll event detected:', scrollContainer.scrollTop);
+        
+        const scrollPos = {
+          x: scrollContainer.scrollLeft,
+          y: scrollContainer.scrollTop
+        };
+        
+        // Send the scroll position to the main process
+        window.electronAPI.sendScrollPosition(scrollPos);
+        
+        // Update the thumb position
+        updateScrollThumbPosition();
+        
+        // Indicate that we are scrolling
+        isScrolling = true;
+        
+        // Clear the previous timeout if it exists
+        if (scrollTimeout) {
+          clearTimeout(scrollTimeout);
+        }
+        
+        // After 200ms without scrolling, consider scrolling finished
+        scrollTimeout = setTimeout(() => {
+          isScrolling = false;
+          console.log('Scrolling finished');
+        }, 200);
+      });
+      
+      // Listen for mouse wheel events on the whole document
+      document.addEventListener('wheel', (event) => {
+        if (scrollContainer.contains(event.target)) {
+          // Allow default scroll behavior
+          return;
+        }
+        
+        // Prevent default behavior for elements outside the container
+        event.preventDefault();
+        
+        // Send the event to the main process
+        window.electronAPI.sendWheelScroll({
+          x: event.deltaX,
+          y: event.deltaY
+        });
+      });
+      
+      // Listen for keyboard events on the whole document
+      document.addEventListener('keydown', (event) => {
+        const navigationKeys = ['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End'];
+        
+        if (navigationKeys.includes(event.key)) {
+          event.preventDefault();
+          
+          // Send the event to the main process
+          window.electronAPI.sendKeyboardScroll({
+            key: event.key
+          });
+        }
+      });
+      
+      // Listen for events from the main process
+      window.electronAPI.onSetContainerSize((size) => {
+        console.log('Container size received:', size);
+        
+        // Set the container size to allow scrolling
+        contentController.style.height = `${size.height}px`;
+        console.log(`Controller height set to ${size.height}px`);
+        
+        // Update the scroll thumb dimensions
+        updateScrollThumbDimensions();
+      });
+      
+      // Function to update the thumb position
+      function updateScrollThumbPosition() {
+        if (!scrollContainer || !scrollThumb) return;
+        
+        const scrollPercentage = scrollContainer.scrollTop / 
+          (scrollContainer.scrollHeight - scrollContainer.clientHeight);
+        
+        const viewportHeight = window.innerHeight - 50;  // Height minus control bar
+        const thumbHeight = scrollThumb.clientHeight;
+        
+        const maxTop = viewportHeight - thumbHeight;
+        const thumbTop = scrollPercentage * maxTop;
+        
+        scrollThumb.style.top = `${50 + thumbTop}px`;  // 50px for the control bar
+      }
+      
+      // Function to update the thumb dimensions
+      function updateScrollThumbDimensions() {
+        if (!scrollContainer || !scrollThumb) return;
+        
+        const viewportHeight = window.innerHeight - 50;  // Height minus control bar
+        const viewportRatio = scrollContainer.clientHeight / scrollContainer.scrollHeight;
+        const thumbHeight = Math.max(50, viewportHeight * viewportRatio);
+        
+        scrollThumb.style.height = `${thumbHeight}px`;
+        
+        // Hide the thumb if all content is visible
+        if (viewportRatio >= 1) {
+          scrollThumb.style.opacity = '0';
+        } else {
+          scrollThumb.style.opacity = '1';
+        }
+        
+        updateScrollThumbPosition();
+      }
+      
+      // Handle double-click on the scroll track (now directly on the position)
+      scrollThumb.addEventListener('dblclick', (event) => {
+        const viewportHeight = window.innerHeight - 50;
+        const clickPositionY = event.clientY - 50;  // 50px for the control bar
+        
+        const thumbHeight = scrollThumb.clientHeight;
+        
+        const scrollPercentage = clickPositionY / viewportHeight;
+        
+        // Calculate the new scroll position
+        const newScrollTop = scrollPercentage * 
+          (scrollContainer.scrollHeight - scrollContainer.clientHeight);
+        
+        // Apply the new position
+        scrollContainer.scrollTop = newScrollTop;
+      });
+      
+      // Handle drag and drop of the thumb
+      scrollThumb.addEventListener('mousedown', (event) => {
+        isDraggingThumb = true;
+        lastY = event.clientY;
+        
+        // Prevent text selection while dragging
+        document.body.style.userSelect = 'none';
+      });
+      
+      document.addEventListener('mousemove', (event) => {
+        if (!isDraggingThumb) return;
+        
+        const deltaY = event.clientY - lastY;
+        lastY = event.clientY;
+        
+        const viewportHeight = window.innerHeight - 50; // Height minus control bar
+        const thumbHeight = scrollThumb.clientHeight;
+        
+        // Calculate the movement as a percentage
+        const movePercentage = deltaY / (viewportHeight - thumbHeight);
+        
+        // Calculate the scroll delta
+        const scrollDelta = movePercentage * 
+          (scrollContainer.scrollHeight - scrollContainer.clientHeight);
+        
+        // Apply the scroll
+        scrollContainer.scrollTop += scrollDelta;
+      });
+      
+      document.addEventListener('mouseup', () => {
+        if (isDraggingThumb) {
+          isDraggingThumb = false;
+          document.body.style.userSelect = '';
+        }
+      });
+      
+      // Initialize the thumb dimensions on load
+      window.addEventListener('resize', updateScrollThumbDimensions);
+
+      // Handle initial state of the mute button
+      window.electronAPI.onAppMuteState(muted => {
+        areTabsMuted = muted;
+        muteTabsBtn.textContent = areTabsMuted ? 'Unmute Tabs' : 'Mute Tabs';
+        muteTabsBtn.classList.toggle('active', areTabsMuted);
+      });
+    });
+  </script>
+</body>
+</html> 

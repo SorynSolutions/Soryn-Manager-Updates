@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #18181b;
+      color: white;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      overflow: hidden;
+      user-select: none;
+    }
+    .control-bar {
+      height: 30px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+      width: calc(100% - 24px);
+      background: linear-gradient(90deg, rgba(30, 30, 46, 0.7) 70%, rgba(124, 58, 237, 0.4) 100%); /* Dark purple to light purple gradient */
+      backdrop-filter: blur(5px);
+      border-top-left-radius: 8px;
+      border-top-right-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.08); /* Subtle border */
+      border-bottom: none;
+    }
+    .label {
+      font-size: 14px;
+      font-weight: bold;
+      flex: 1;
+      color: #fff;
+      letter-spacing: 0.5px;
+    }
+    .view-btn {
+      background: none;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 16px;
+      font-weight: bold;
+      margin-left: 4px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .view-btn:hover {
+      background: rgba(255, 255, 255, 0.15);
+    }
+    #close-btn {
+      color: #ff5555; /* Red color for close button */
+    }
+    #close-btn:hover {
+      background: rgba(255, 85, 85, 0.2); /* Reddish hover */
+    }
+  </style>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      // Get the label from the URL
+      const urlParams = new URLSearchParams(window.location.search);
+      const label = urlParams.get('label') || 'Undefined';
+      const viewId = urlParams.get('viewId') || '0';
+      
+      // Set the label in the HTML
+      document.getElementById('view-label').textContent = label;
+
+      // Add event for fullscreen button
+      document.getElementById('fullscreen-btn').addEventListener('click', () => {
+        window.electronAPI.toggleFullscreen();
+      });
+      
+      // Add event for DevTools button (now close button)
+      document.getElementById('close-btn').addEventListener('click', () => {
+        if (window.electronAPI && window.electronAPI.closeView) {
+          window.electronAPI.closeView(viewId);
+        }
+      });
+      
+      // Add event for Reload button
+      document.getElementById('reload-btn').addEventListener('click', () => {
+        if (window.electronAPI && window.electronAPI.reloadView) {
+          window.electronAPI.reloadView(viewId);
+        }
+      });
+    });
+  </script>
+</head>
+<body>
+  <div class="control-bar">
+    <div id="view-label" class="label"></div>
+    <button id="reload-btn" class="view-btn">
+      <span>🔄</span>
+    </button>
+    <button id="close-btn" class="view-btn">
+      <span>✕</span>
+    </button>
+    <button id="fullscreen-btn" class="view-btn">
+      <span>⛶</span>
+    </button>
+  </div>
+</body>
+</html> 
