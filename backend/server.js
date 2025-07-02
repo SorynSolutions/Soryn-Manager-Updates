@@ -115,6 +115,7 @@ app.get('/api/health', (req, res) => {
 
 // Validate license key
 app.post('/api/validate-key', async (req, res) => {
+    console.log('Received validate-key request:', req.body);
     try {
         const { key, hwid } = req.body;
 
