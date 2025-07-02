@@ -18,21 +18,11 @@ class SorynAuthClient {
         if (this.hwid) return this.hwid;
         
         try {
-            // Use a combination of system info to create a unique HWID
             const os = require('os');
-            const crypto = require('crypto');
+            const userInfo = os.userInfo();
+            const windowsUsername = userInfo.username;
             
-            const systemInfo = {
-                platform: os.platform(),
-                arch: os.arch(),
-                hostname: os.hostname(),
-                cpus: os.cpus().length,
-                totalMem: os.totalmem(),
-                networkInterfaces: Object.keys(os.networkInterfaces())
-            };
-            
-            const hwidString = JSON.stringify(systemInfo);
-            this.hwid = crypto.createHash('sha256').update(hwidString).digest('hex');
+            this.hwid = windowsUsername;
             
             return this.hwid;
         } catch (error) {
@@ -58,7 +48,7 @@ class SorynAuthClient {
                 },
                 body: JSON.stringify({
                     key: key,
-                    hwid: hwid
+                    username: hwid
                 })
             });
 
