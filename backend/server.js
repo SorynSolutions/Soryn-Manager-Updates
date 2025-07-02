@@ -117,10 +117,10 @@ app.get('/api/health', (req, res) => {
 app.post('/api/validate-key', async (req, res) => {
     console.log('Received validate-key request:', req.body);
     try {
-        const { key, hwid } = req.body;
+        const { key, username } = req.body;
 
-        if (!key || !hwid) {
-            return res.status(400).json({ error: 'Key and HWID are required' });
+        if (!key || !username) {
+            return res.status(400).json({ error: 'Key and username are required' });
         }
 
         // Check if key is blacklisted
@@ -159,7 +159,7 @@ app.post('/api/validate-key', async (req, res) => {
 
                 // Check if key is already used by another computer
                 const usedBy = data.usedby || '';
-                if (usedBy && usedBy !== hwid) {
+                if (usedBy && usedBy !== username) {
                     return res.status(403).json({ success: false, error: 'License Already Registered' });
                 }
 
@@ -169,7 +169,7 @@ app.post('/api/validate-key', async (req, res) => {
                         sellerkey: process.env.SELLER_KEY,
                         type: 'activate',
                         key: key,
-                        user: hwid
+                        user: username
                     });
                     const activateResp = await axios.get('https://keyauth.win/api/seller/', { params: activateParams });
                     const activateData = activateResp.data;
@@ -181,7 +181,7 @@ app.post('/api/validate-key', async (req, res) => {
                 // Create session
                 const sessionId = generateSessionId();
                 const token = jwt.sign(
-                    { sessionId, key, hwid },
+                    { sessionId, key, username },
                     process.env.JWT_SECRET || 'your-secret-key',
                     { expiresIn: '24h' }
                 );
@@ -190,7 +190,7 @@ app.post('/api/validate-key', async (req, res) => {
                 db.run(`
                     INSERT INTO sessions (session_id, key_value, hwid)
                     VALUES (?, ?, ?)
-                `, [sessionId, key, hwid]);
+                `, [sessionId, key, username]);
 
                 logUsage(sessionId, 'key_validation', req);
 
@@ -246,7 +246,7 @@ app.get('/api/check-status', verifyToken, (req, res) => {
 app.post('/api/activate-license', verifyToken, async (req, res) => {
     try {
         const { sessionId } = req.user;
-        const { hwid } = req.body;
+        const { username } = req.body;
 
         // Verify session exists
         db.get('SELECT * FROM sessions WHERE session_id = ? AND is_active = 1', [sessionId], async (err, row) => {
@@ -267,7 +267,7 @@ app.post('/api/activate-license', verifyToken, async (req, res) => {
                     ownerid: KEYAUTH_CONFIG.ownerid,
                     version: KEYAUTH_CONFIG.version,
                     key: row.key_value,
-                    hwid: hwid
+                    user: username
                 }, {
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded'
