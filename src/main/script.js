@@ -12275,12 +12275,6 @@ function interceptHttpRequests() {
     return (this._url = url), nativeXhrOpen.apply(this, arguments);
   }),
     (xhrPrototype.send = function (...arg) {
-      for (let url of BLOCKED_URLS)
-        if (this._url.startsWith(url)) {
-          if (url === "https://dc.services.visualstudio.com")
-            window.setTimeout(clearAllLogs, 1000);
-          return BxLogger.warning("Blocked URL", url), !1;
-        }
       return nativeXhrSend.apply(this, arguments);
     });
   let gamepassAllGames = [],
@@ -12383,6 +12377,21 @@ function interceptHttpRequests() {
   };
 }
 function generateMsDeviceInfo(osName) {
+  // Get real device info (desktop/laptop only)
+  const nav = window.navigator;
+  const scr = window.screen;
+  // OS version/platform (assume Windows/desktop if not found)
+  const osVersion = nav.userAgent.match(/Windows NT ([0-9.]+)/)?.[1] || nav.appVersion || "unknown";
+  const platform = nav.platform || "desktop";
+  // Device make/model (assume Microsoft PC)
+  let make = "Microsoft", model = "PC";
+  // Display info
+  const width = scr?.width || 1920;
+  const height = scr?.height || 1080;
+  const dpiX = window.devicePixelRatio || 1;
+  const dpiY = window.devicePixelRatio || 1;
+  // Browser version (always Chrome)
+  const chromeVersion = nav.userAgent.match(/Chrome\/([0-9.]+)/)?.[1] || "unknown";
   return {
     appInfo: {
       env: {
@@ -12395,12 +12404,12 @@ function generateMsDeviceInfo(osName) {
       },
     },
     dev: {
-      os: { name: osName, ver: "22631.2715", platform: "desktop" },
-      hw: { make: "Microsoft", model: "unknown", sdktype: "web" },
-      browser: { browserName: "chrome", browserVersion: "130.0" },
+      os: { name: osName, ver: osVersion, platform },
+      hw: { make, model, sdktype: "web" },
+      browser: { browserName: "chrome", browserVersion: chromeVersion },
       displayInfo: {
-        dimensions: { widthInPixels: 1920, heightInPixels: 1080 },
-        pixelDensity: { dpiX: 1, dpiY: 1 },
+        dimensions: { widthInPixels: width, heightInPixels: height },
+        pixelDensity: { dpiX, dpiY },
       },
     },
   };

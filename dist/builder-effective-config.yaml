@@ -10,11 +10,6 @@ files:
       - index.js
       - package-lock.json
       - package.json
-publish:
-  - provider: github
-    owner: SorynSolutions
-    repo: Soryn-Manager-Updates
-    token: <stripped sensitive data>
 win:
   target:
     - target: portable

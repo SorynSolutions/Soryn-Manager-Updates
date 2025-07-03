@@ -236,6 +236,38 @@ input[type="range"]::-webkit-slider-thumb:hover {
   background-color: #6c6c6c;
 }
 
+.btn-discord {
+  padding: 0.9rem 3.5rem;
+  background-image: linear-gradient(to right, #5865F2 0%, #404eed 51%, #5865F2 100%);
+  background-size: 200% auto;
+  color: #ffffff;
+  border: none;
+  border-radius: 12px;
+  font-size: 1.25rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  margin-top: 1rem;
+  width: auto;
+  align-self: center;
+  box-shadow: 0 0 10px rgba(88, 101, 242, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-discord i {
+  margin-left: 0.5rem;
+  font-size: 1.3rem;
+}
+
+.btn-discord:hover {
+  background-position: right center;
+  background-image: linear-gradient(to right, #404eed 0%, #5865F2 51%, #404eed 100%);
+  color: #cba6f7;
+  box-shadow: 0 0 15px rgba(88, 101, 242, 0.7);
+}
+
 /* Star animation */
 .stars-container {
   position: fixed;

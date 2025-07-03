@@ -5,7 +5,6 @@ const fs = require('fs');
 const url = require('url');
 const MacroManager = require('./macro');
 const { throttle } = require('lodash');
-const { autoUpdater } = require('electron-updater');
 
 // Script to simulate that the window is always active
 const AlwaysActiveWindowScript = `
@@ -459,41 +458,6 @@ class MainViewWindow {
     // Handle view control events
     ipcMain.on('view-control', (event, { action, index }) => {
       // ... existing code ...
-    });
-
-    // Auto-update event handlers
-    autoUpdater.on('update-available', () => {
-      console.log('Update available');
-      if (this.window && this.window.webContents && !this.window.webContents.isDestroyed()) {
-        this.window.webContents.send('update-available');
-      }
-    });
-
-    autoUpdater.on('update-not-available', () => {
-      console.log('Update not available');
-      if (this.window && this.window.webContents && !this.window.webContents.isDestroyed()) {
-        this.window.webContents.send('update-not-available');
-      }
-    });
-
-    autoUpdater.on('update-downloaded', () => {
-      console.log('Update downloaded, installing...');
-      // Install and restart
-      autoUpdater.quitAndInstall();
-    });
-
-    autoUpdater.on('error', (err) => {
-      console.error('Auto-updater error:', err);
-      if (this.window && this.window.webContents && !this.window.webContents.isDestroyed()) {
-        this.window.webContents.send('update-error', err == null ? "unknown" : err.message);
-      }
-    });
-
-    autoUpdater.on('download-progress', (progressObj) => {
-      console.log('Download progress:', progressObj);
-      if (this.window && this.window.webContents && !this.window.webContents.isDestroyed()) {
-        this.window.webContents.send('update-download-progress', progressObj);
-      }
     });
   }
 

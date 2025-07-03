@@ -46,7 +46,7 @@ class MacroManager {
 
     // For centralized movement macros that must run globally
     if (macroId === 'macro4') {
-      this.toggleRandomMovements(true);
+      this.toggleRandomMovements();
       return;
     }
 
@@ -101,10 +101,20 @@ class MacroManager {
   executeMultiSearch(views) {
     views.forEach(view => {
       if (view.webContents) {
-        this.executeDirectMovementScript(view, 'r', 'press');
-        setTimeout(() => {
-          this.executeDirectMovementScript(view, 'r', 'release');
-        }, 100);
+        view.webContents.executeJavaScript(`
+          (function() {
+            try {
+              // Press R for 100ms to reload
+              window.pressKey('r');
+              setTimeout(() => {
+                window.releaseKey('r');
+                console.log('Macro 1 executed successfully');
+              }, 100);
+            } catch (error) {
+              console.error('Error executing macro 1:', error);
+            }
+          })();
+        `).catch(err => console.error('Failed to execute macro1:', err));
       }
     });
   }
@@ -115,28 +125,45 @@ class MacroManager {
   executeAbandonNext(views) {
     views.forEach(view => {
       if (view.webContents) {
-        this.executeDirectMovementScript(view, 'Escape', 'press');
-        setTimeout(() => {
-          this.executeDirectMovementScript(view, 'Escape', 'release');
-          setTimeout(() => {
-            this.executeDirectMovementScript(view, 'Tab', 'press');
-            setTimeout(() => {
-              this.executeDirectMovementScript(view, 'Tab', 'release');
+        view.webContents.executeJavaScript(`
+          (function() {
+            try {
+              // Sequence: Escape, Tab x2, Enter
+              console.log('Start of macro 2 sequence');
+              window.pressKey('Escape');
               setTimeout(() => {
-                this.executeDirectMovementScript(view, 'Tab', 'press');
+                window.releaseKey('Escape');
+                console.log('Escape released');
+                
                 setTimeout(() => {
-                  this.executeDirectMovementScript(view, 'Tab', 'release');
+                  window.pressKey('Tab');
                   setTimeout(() => {
-                    this.executeDirectMovementScript(view, 'Enter', 'press');
+                    window.releaseKey('Tab');
+                    console.log('First Tab released');
+                    
                     setTimeout(() => {
-                      this.executeDirectMovementScript(view, 'Enter', 'release');
-                    }, 100);
-                  }, 200);
-                }, 100);
-              }, 200);
-            }, 100);
-          }, 500);
-        }, 100);
+                      window.pressKey('Tab');
+                      setTimeout(() => {
+                        window.releaseKey('Tab');
+                        console.log('Second Tab released');
+                        
+                        setTimeout(() => {
+                          window.pressKey('Enter');
+                          setTimeout(() => {
+                            window.releaseKey('Enter');
+                            console.log('Enter released, sequence finished');
+                          }, 100);
+                        }, 200);
+                      }, 100);
+                    }, 200);
+                  }, 100);
+                }, 500);
+              }, 100);
+            } catch (error) {
+              console.error('Error executing macro 2:', error);
+            }
+          })();
+        `).catch(err => console.error('Failed to execute macro2:', err));
       }
     });
   }
@@ -147,10 +174,21 @@ class MacroManager {
   executeFullscreen(views) {
     views.forEach(view => {
       if (view.webContents) {
-        this.executeDirectMovementScript(view, 'F11', 'press');
-        setTimeout(() => {
-          this.executeDirectMovementScript(view, 'F11', 'release');
-        }, 100);
+        view.webContents.executeJavaScript(`
+          (function() {
+            try {
+              // F11 to toggle fullscreen
+              console.log('Executing Fullscreen macro (F11)');
+              window.pressKey('F11');
+              setTimeout(() => {
+                window.releaseKey('F11');
+                console.log('F11 released, macro 3 finished');
+              }, 100);
+            } catch (error) {
+              console.error('Error executing macro 3:', error);
+            }
+          })();
+        `).catch(err => console.error('Failed to execute macro3:', err));
       }
     });
   }
@@ -158,9 +196,9 @@ class MacroManager {
   /**
    * Macro 4: Random Movements (Toggle)
    */
-  toggleRandomMovements(enable) {
-    // Set the macro state based on the enable flag
-    this.randomMovementActive = enable;
+  toggleRandomMovements() {
+    // Toggle the macro state
+    this.randomMovementActive = !this.randomMovementActive;
     
     // Update the visual status in the control bar
     this.mainWindow.updateControlBarMacroStatus(4, this.randomMovementActive);
@@ -198,7 +236,7 @@ class MacroManager {
       this.startCentralMovementSequence();
     } else {
       console.log('Stopping random movements');
-      this.stopAllSynchronizedMovements();
+      this.stopRandomMovements();
     }
   }
 
@@ -289,10 +327,43 @@ class MacroManager {
     // Execute the jump on all views with a simplified approach
     synchronizedViews.forEach(view => {
       if (view.webContents && !view.webContents.isDestroyed()) {
-        this.executeDirectMovementScript(view, ' ', 'press');
-        setTimeout(() => {
-          this.executeDirectMovementScript(view, ' ', 'release');
-        }, 100);
+        const script = `
+          (function() {
+            try {
+              const element = document.documentElement || document.body;
+              
+              // Simulate spacebar press
+              const downEvent = document.createEvent('HTMLEvents');
+              downEvent.initEvent('keydown', true, true);
+              downEvent.key = ' ';
+              downEvent.code = 'Space';
+              downEvent.keyCode = 32;
+              element.dispatchEvent(downEvent);
+              
+              // Release after 100ms
+              setTimeout(() => {
+                const upEvent = document.createEvent('HTMLEvents');
+                upEvent.initEvent('keyup', true, true);
+                upEvent.key = ' ';
+                upEvent.code = 'Space';
+                upEvent.keyCode = 32;
+                element.dispatchEvent(upEvent);
+              }, 100);
+              
+              return "Simple jump executed";
+            } catch(error) {
+              return "Jump error: " + error.message;
+            }
+          })();
+        `;
+        
+        view.webContents.executeJavaScript(script)
+          .then(result => console.log(`View ${view.viewNumber}: ${result}`))
+          .catch(err => {
+            console.error(`Jump error in view ${view.viewNumber}:`, err);
+            // Try the direct approach in case of failure
+            this.executeDirectMovement(view, [' '], 100);
+          });
       }
     });
     
@@ -315,14 +386,40 @@ class MacroManager {
   }
 
   /**
-   * Execute a random movement
+   * Utility: Get a random integer between min and max (inclusive)
+   */
+  getRandomInt(min, max) {
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+  }
+
+  /**
+   * Utility: Get a random float between min and max
+   */
+  getRandomFloat(min, max) {
+    return Math.random() * (max - min) + min;
+  }
+
+  /**
+   * Utility: Shuffle an array (Fisher-Yates)
+   */
+  shuffleArray(array) {
+    let arr = array.slice();
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+  }
+
+  /**
+   * Humanized random movement (QWERTY, with random delays and durations)
    */
   executeRandomMovement() {
     if (!this.randomMovementActive || !this.centralMovementController.isRunning) {
       return;
     }
-    
-    // Possible directions (in QWERTY: WASD)
+
+    // QWERTY directions
     const directions = [
       ['w'],      // Forward
       ['a'],      // Left
@@ -333,59 +430,165 @@ class MacroManager {
       ['s', 'a'], // Diagonal backward-left
       ['s', 'd']  // Diagonal backward-right
     ];
-    
+
     try {
-      // 1. Choose a direction randomly
-      let chosen = directions[Math.floor(Math.random() * directions.length)];
-      
-      // 2. Reduce the probability of replacing 'w' with 's' to only 20%
-      if (chosen.includes('w') && !chosen.includes('s') && Math.random() < 0.2) {
-        chosen = ['s'];
+      // 1. Randomly shuffle directions and pick one
+      let shuffled = this.shuffleArray(directions);
+      let chosen = shuffled[0];
+
+      // 2. Occasionally skip or repeat a key (simulate human error)
+      if (Math.random() < 0.1) {
+        // 10% chance to skip a movement
+        chosen = [shuffled[1][0]];
+      } else if (Math.random() < 0.1) {
+        // 10% chance to repeat last direction
+        if (this.centralMovementController.lastDirection) {
+          chosen = this.centralMovementController.lastDirection;
+        }
       }
-      
-      // Use QWERTY keys directly
-      const mappedKeys = chosen;
-      
-      // Determine the movement duration (between 500ms and 1750ms)
-      const pressDuration = 500 + Math.random() * 1250;
-      
-      // Execute the movement on all synchronized views
-      console.log(`Executing movement: ${mappedKeys.join('+')} for ${pressDuration}ms`);
-      
+      this.centralMovementController.lastDirection = chosen;
+
+      // 3. Randomize key hold duration (300–900ms)
+      const pressDuration = this.getRandomInt(300, 900);
+
+      // 4. Execute the movement on all synchronized views
       const synchronizedViews = this.mainWindow.getAllSynchronizedViews();
-      
       synchronizedViews.forEach(view => {
         if (view.webContents && !view.webContents.isDestroyed()) {
-          mappedKeys.forEach(key => {
-            this.executeDirectMovementScript(view, key, 'press');
-          });
-
-          setTimeout(() => {
-            mappedKeys.forEach(key => {
-              this.executeDirectMovementScript(view, key, 'release');
+          const script = `
+            (function() {
+              try {
+                const simulateKeyEvent = (type, key) => {
+                  const element = document.documentElement || document.body;
+                  const event = document.createEvent('HTMLEvents');
+                  event.initEvent(type, true, true);
+                  event.key = key;
+                  event.code = key === ' ' ? 'Space' :
+                                key === 'Shift' ? 'ShiftLeft' :
+                                'Key' + (key === 'w' ? 'W' :
+                                          key === 'a' ? 'A' :
+                                          key === 's' ? 'S' :
+                                          key === 'd' ? 'D' : key.toUpperCase());
+                  event.keyCode = key === ' ' ? 32 :
+                                  key === 'Shift' ? 16 :
+                                  key.charCodeAt(0);
+                  event.shiftKey = key === 'Shift' || keys.includes('Shift');
+                  element.dispatchEvent(event);
+                };
+                // Press the keys
+                const keys = ${JSON.stringify(chosen)};
+                keys.forEach(key => simulateKeyEvent('keydown', key));
+                // Release after the delay
+                setTimeout(() => {
+                  keys.forEach(key => simulateKeyEvent('keyup', key));
+                }, ${pressDuration});
+                return "Humanized movement executed";
+              } catch (error) {
+                return "Error: " + error.message;
+              }
+            })();
+          `;
+          view.webContents.executeJavaScript(script)
+            .then(result => console.log(`View ${view.viewNumber}: ${result}`))
+            .catch(err => {
+              console.error(`Error in view ${view.viewNumber}:`, err);
+              this.executeDirectMovement(view, chosen, pressDuration);
             });
-          }, pressDuration);
         }
       });
-      
-      // Schedule the next movement with a random delay
-      const nextDelay = pressDuration + 1000 + Math.random() * 1250;
-      
+
+      // 5. Schedule the next movement with a random delay (1.2–3.5s)
+      const nextDelay = this.getRandomInt(1200, 3500);
       const nextMovementId = setTimeout(() => {
         this.executeRandomMovement();
       }, nextDelay);
-      
       this.centralMovementController.timeoutIds.push(nextMovementId);
-      
+
     } catch (error) {
       console.error('Error in central random movement:', error);
-      
       // In case of error, try to continue after a delay
       const errorRecoveryId = setTimeout(() => {
         this.executeRandomMovement();
       }, 2000);
-      
       this.centralMovementController.timeoutIds.push(errorRecoveryId);
+    }
+  }
+
+  /**
+   * Execute a direct movement (fallback)
+   */
+  executeDirectMovement(view, keys, duration) {
+    if (!view || !view.webContents || view.webContents.isDestroyed()) return;
+    
+    console.log(`Fallback: Direct execution for view ${view.viewNumber}`);
+    
+    try {
+      // Try to inject code directly into the page
+      view.webContents.insertCSS(`
+        @keyframes pressed { from {opacity: 0.8;} to {opacity: 1;} }
+        body:after {
+          content: "Active movement";
+          position: fixed;
+          bottom: 10px;
+          right: 10px;
+          background: rgba(0,255,0,0.5);
+          padding: 5px;
+          z-index: 9999;
+          animation: pressed 0.5s infinite alternate;
+        }
+      `).then(() => {
+        // Simulate a click in the center to activate focus
+        const bounds = view.getBounds();
+        view.webContents.sendInputEvent({
+          type: 'mouseDown',
+          x: Math.floor(bounds.width / 2),
+          y: Math.floor(bounds.height / 2),
+          button: 'left',
+          clickCount: 1
+        });
+        
+        setTimeout(() => {
+          view.webContents.sendInputEvent({
+            type: 'mouseUp',
+            x: Math.floor(bounds.width / 2),
+            y: Math.floor(bounds.height / 2),
+            button: 'left',
+            clickCount: 1
+          });
+          
+          // AZERTY mapping for fallback
+          const keyMapping = {
+            'z': 'w',
+            'q': 'a',
+            's': 's',
+            'd': 'd',
+            'Shift': 'Shift'
+          };
+          
+          // Send keyboard events directly via IPC
+          keys.forEach(key => {
+            const mappedKey = keyMapping[key] || key;
+            this.mainWindow.mainWebContents.send('simulate-keypress', {
+              viewId: view.viewNumber,
+              key: mappedKey,
+              state: 'down'
+            });
+          });
+          
+          setTimeout(() => {
+            keys.forEach(key => {
+              const mappedKey = keyMapping[key] || key;
+              this.mainWindow.mainWebContents.send('simulate-keypress', {
+                viewId: view.viewNumber,
+                key: mappedKey,
+                state: 'up'
+              });
+            });
+          }, duration);
+        }, 100);
+      }).catch(err => console.error('CSS injection error:', err));
+    } catch (error) {
+      console.error(`Error during direct movement (view ${view.viewNumber}):`, error);
     }
   }
 
@@ -404,10 +607,22 @@ class MacroManager {
     // Execute Space on hosts first
     hostViews.forEach(view => {
       if (view.webContents && !view.webContents.isDestroyed()) {
-        this.executeDirectMovementScript(view, ' ', 'press');
-        setTimeout(() => {
-          this.executeDirectMovementScript(view, ' ', 'release');
-        }, 100);
+        view.webContents.executeJavaScript(`
+          (function() {
+            try {
+              console.log('Auto Drop: Pressing Space (host)');
+              window.pressKey(' ');
+              setTimeout(() => {
+                window.releaseKey(' ');
+                console.log('Auto Drop: Released Space (host)');
+              }, 100);
+              return "Auto Drop executed on host";
+            } catch (error) {
+              console.error('Error executing Auto Drop on host:', error);
+              return "Error: " + error.message;
+            }
+          })();
+        `).catch(err => console.error('Failed to execute Auto Drop on host:', err));
       }
     });
     
@@ -415,10 +630,22 @@ class MacroManager {
     setTimeout(() => {
       playerViews.forEach(view => {
         if (view.webContents && !view.webContents.isDestroyed()) {
-          this.executeDirectMovementScript(view, ' ', 'press');
-          setTimeout(() => {
-            this.executeDirectMovementScript(view, ' ', 'release');
-          }, 100);
+          view.webContents.executeJavaScript(`
+            (function() {
+              try {
+                console.log('Auto Drop: Pressing Space (player)');
+                window.pressKey(' ');
+                setTimeout(() => {
+                  window.releaseKey(' ');
+                  console.log('Auto Drop: Released Space (player)');
+                }, 100);
+                return "Auto Drop executed on player";
+              } catch (error) {
+                console.error('Error executing Auto Drop on player:', error);
+                return "Error: " + error.message;
+              }
+            })();
+          `).catch(err => console.error('Failed to execute Auto Drop on player:', err));
         }
       });
     }, 900);
@@ -466,10 +693,24 @@ class MacroManager {
           const currentKey = allKeys[keyIndex];
           
           hostViews.forEach(view => {
-            this.executeDirectMovementScript(view, currentKey, 'press');
-            setTimeout(() => {
-              this.executeDirectMovementScript(view, currentKey, 'release');
-            }, 1500); // Increased from 1000ms to 1500ms hold
+            if (view.webContents && !view.webContents.isDestroyed()) {
+              view.webContents.executeJavaScript(`
+                (function() {
+                  try {
+                    console.log('AFK Host: Pressing ${currentKey}');
+                    window.pressKey('${currentKey}');
+                    setTimeout(() => {
+                      window.releaseKey('${currentKey}');
+                      console.log('AFK Host: Released ${currentKey}');
+                    }, 1500); // Increased from 1000ms to 1500ms hold
+                    return "AFK Host: movement executed on key ${currentKey}";
+                  } catch (error) {
+                    console.error('Error executing AFK Host:', error);
+                    return "Error: " + error.message;
+                  }
+                })();
+              `).catch(err => console.error(`Failed to execute AFK Host movement for key ${currentKey}:`, err));
+            }
           });
           
           // Move to the next key after 1.6 seconds (reduced delay between keys)
@@ -500,9 +741,23 @@ class MacroManager {
       
       // Release all keys in host views
       hostViews.forEach(view => {
-        ['z', 'q', 's', 'd'].forEach(key => {
-          this.executeDirectMovementScript(view, key, 'release');
-        });
+        if (view.webContents && !view.webContents.isDestroyed()) {
+          view.webContents.executeJavaScript(`
+            (function() {
+              try {
+                // Release all possible keys
+                ['z', 'q', 's', 'd'].forEach(key => {
+                  window.releaseKey(key);
+                });
+                console.log('AFK Host: All keys released');
+                return "AFK Host: stopped";
+              } catch (error) {
+                console.error('Error stopping AFK Host:', error);
+                return "Error: " + error.message;
+              }
+            })();
+          `).catch(err => console.error('Failed to stop AFK Host:', err));
+        }
       });
     }
   }
@@ -562,10 +817,24 @@ class MacroManager {
             const currentKey = movesToReplay[index];
             
             playerViews.forEach(view => {
-              this.executeDirectMovementScript(view, currentKey, 'press');
-              setTimeout(() => {
-                this.executeDirectMovementScript(view, currentKey, 'release');
-              }, 1100); // Increased from 600ms to 1100ms hold
+              if (view.webContents && !view.webContents.isDestroyed()) {
+                view.webContents.executeJavaScript(`
+                  (function() {
+                    try {
+                      console.log('AFK Player Replay: Pressing ${currentKey}');
+                      window.pressKey('${currentKey}');
+                      setTimeout(() => {
+                        window.releaseKey('${currentKey}');
+                        console.log('AFK Player Replay: Released ${currentKey}');
+                      }, 1100); // Increased from 600ms to 1100ms hold
+                      return "AFK Player Replay: movement executed on key ${currentKey}";
+                    } catch (error) {
+                      console.error('Error executing AFK Player Replay:', error);
+                      return "Error: " + error.message;
+                    }
+                  })();
+                `).catch(err => console.error(`Failed to execute AFK Player replay movement for key ${currentKey}:`, err));
+              }
             });
             
             // Move to the next move after 1.2 seconds (reduced delay between moves)
@@ -591,10 +860,24 @@ class MacroManager {
           console.log('AFK Player: Executing key', randomKey, '- Recorded moves:', lastMoves);
           
           playerViews.forEach(view => {
-            this.executeDirectMovementScript(view, randomKey, 'press');
-            setTimeout(() => {
-              this.executeDirectMovementScript(view, randomKey, 'release');
-            }, 1100); // Increased from 600ms to 1100ms hold
+            if (view.webContents && !view.webContents.isDestroyed()) {
+              view.webContents.executeJavaScript(`
+                (function() {
+                  try {
+                    console.log('AFK Player: Pressing ${randomKey}');
+                    window.pressKey('${randomKey}');
+                    setTimeout(() => {
+                      window.releaseKey('${randomKey}');
+                      console.log('AFK Player: Released ${randomKey}');
+                    }, 1100); // Increased from 600ms to 1100ms hold
+                    return "AFK Player: movement executed on key ${randomKey}";
+                  } catch (error) {
+                    console.error('Error executing AFK Player:', error);
+                    return "Error: " + error.message;
+                  }
+                })();
+              `).catch(err => console.error(`Failed to execute AFK Player movement for key ${randomKey}:`, err));
+            }
           });
           
           // If we have recorded 4 moves, switch to replay mode for the next cycle
@@ -620,9 +903,23 @@ class MacroManager {
       
       // Release all keys in player views
       playerViews.forEach(view => {
-        ['z', 'q', 's', 'd'].forEach(key => {
-          this.executeDirectMovementScript(view, key, 'release');
-        });
+        if (view.webContents && !view.webContents.isDestroyed()) {
+          view.webContents.executeJavaScript(`
+            (function() {
+              try {
+                // Release all possible keys
+                ['z', 'q', 's', 'd'].forEach(key => {
+                  window.releaseKey(key);
+                });
+                console.log('AFK Player: All keys released');
+                return "AFK Player: stopped";
+              } catch (error) {
+                console.error('Error stopping AFK Player:', error);
+                return "Error: " + error.message;
+              }
+            })();
+          `).catch(err => console.error('Failed to stop AFK Player:', err));
+        }
       });
     }
   }
@@ -672,10 +969,22 @@ class MacroManager {
             const intervalId = setInterval(() => {
               if (!this.afkHostActive || !this.afkPlayerActive) return;
               
-              this.executeDirectMovementScript(view, 'v', 'press');
-              setTimeout(() => {
-                this.executeDirectMovementScript(view, 'v', 'release');
-              }, 600); // Increased from 100ms to 600ms hold
+              view.webContents.executeJavaScript(`
+                (function() {
+                  try {
+                    console.log('AFK Host+Player: Pressing V (player)');
+                    window.pressKey('v');
+                    setTimeout(() => {
+                      window.releaseKey('v');
+                      console.log('AFK Host+Player: Released V (player)');
+                    }, 600); // Increased from 100ms to 600ms hold
+                    return "AFK Host+Player: V press executed";
+                  } catch (error) {
+                    console.error('Error executing V press:', error);
+                    return "Error: " + error.message;
+                  }
+                })();
+              `).catch(err => console.error('Failed to execute V key press on player:', err));
             }, 2000); // Reduced from 3000ms to 2000ms interval
             
             this.vKeyPressIntervalIds.push(intervalId);
@@ -697,17 +1006,45 @@ class MacroManager {
             const currentKey = allKeys[keyIndex];
             
             hostViews.forEach(view => {
-              this.executeDirectMovementScript(view, currentKey, 'press');
-              setTimeout(() => {
-                this.executeDirectMovementScript(view, currentKey, 'release');
-              }, 1500); // Increased from 1000ms to 1500ms hold
+              if (view.webContents && !view.webContents.isDestroyed()) {
+                view.webContents.executeJavaScript(`
+                  (function() {
+                    try {
+                      console.log('AFK Host and Player: Pressing ${currentKey}');
+                      window.pressKey('${currentKey}');
+                      setTimeout(() => {
+                        window.releaseKey('${currentKey}');
+                        console.log('AFK Host and Player: Released ${currentKey}');
+                      }, 1500); // Increased from 1000ms to 1500ms hold
+                      return "AFK Host and Player: movement executed on key ${currentKey}";
+                    } catch (error) {
+                      console.error('Error executing AFK Host and Player:', error);
+                      return "Error: " + error.message;
+                    }
+                  })();
+                `).catch(err => console.error(`Failed to execute AFK Host and Player movement for key ${currentKey}:`, err));
+              }
             });
             
             playerViews.forEach(view => {
-              this.executeDirectMovementScript(view, currentKey, 'press');
-              setTimeout(() => {
-                this.executeDirectMovementScript(view, currentKey, 'release');
-              }, 1500); // Increased from 1000ms to 1500ms hold
+              if (view.webContents && !view.webContents.isDestroyed()) {
+                view.webContents.executeJavaScript(`
+                  (function() {
+                    try {
+                      console.log('AFK Host and Player: Pressing ${currentKey}');
+                      window.pressKey('${currentKey}');
+                      setTimeout(() => {
+                        window.releaseKey('${currentKey}');
+                        console.log('AFK Host and Player: Released ${currentKey}');
+                      }, 1500); // Increased from 1000ms to 1500ms hold
+                      return "AFK Host and Player: movement executed on key ${currentKey}";
+                    } catch (error) {
+                      console.error('Error executing AFK Host and Player:', error);
+                      return "Error: " + error.message;
+                    }
+                  })();
+                `).catch(err => console.error(`Failed to execute AFK Host and Player movement for key ${currentKey}:`, err));
+              }
             });
             
             // Move to the next key after 1.6 seconds (reduced delay between keys)
@@ -745,9 +1082,22 @@ class MacroManager {
           // Release all keys in host and player views
           const allViews = [...hostViews, ...playerViews];
           allViews.forEach(view => {
-            ['z', 'q', 's', 'd', 'v'].forEach(key => {
-              this.executeDirectMovementScript(view, key, 'release');
-            });
+            if (view.webContents && !view.webContents.isDestroyed()) {
+              view.webContents.executeJavaScript(`
+                (function() {
+                  try {
+                    // Release all possible keys
+                    ['z', 'q', 's', 'd', 'v'].forEach(key => {
+                      window.releaseKey(key);
+                    });
+                    return "AFK Host and Player: keys released for complete restart";
+                  } catch (error) {
+                    console.error('Error releasing keys:', error);
+                    return "Error: " + error.message;
+                  }
+                })();
+              `).catch(err => console.error('Failed to release keys:', err));
+            }
           });
           
           // Simulate complete restart after a short pause
@@ -786,9 +1136,22 @@ class MacroManager {
         // Release all keys in host and player views
         const allViews = [...hostViews, ...playerViews];
         allViews.forEach(view => {
-          ['z', 'q', 's', 'd', 'v'].forEach(key => {
-            this.executeDirectMovementScript(view, key, 'release');
-          });
+          if (view.webContents && !view.webContents.isDestroyed()) {
+            view.webContents.executeJavaScript(`
+              (function() {
+                try {
+                  // Release all possible keys
+                  ['z', 'q', 's', 'd', 'v'].forEach(key => {
+                    window.releaseKey(key);
+                  });
+                  return "AFK Host and Player: keys released for restart";
+                } catch (error) {
+                  console.error('Error releasing keys:', error);
+                  return "Error: " + error.message;
+                }
+              })();
+            `).catch(err => console.error('Failed to release keys:', err));
+          }
         });
       };
       
@@ -819,24 +1182,24 @@ class MacroManager {
       // Release all keys in host and player views
       const allViews = [...hostViews, ...playerViews];
       allViews.forEach(view => {
-        ['z', 'q', 's', 'd', 'v'].forEach(key => {
-          this.executeDirectMovementScript(view, key, 'release');
-        });
+        if (view.webContents && !view.webContents.isDestroyed()) {
+          view.webContents.executeJavaScript(`
+            (function() {
+              try {
+                // Release all possible keys
+                ['z', 'q', 's', 'd', 'v'].forEach(key => {
+                  window.releaseKey(key);
+                });
+                console.log('AFK Host and Player: All keys released');
+                return "AFK Host and Player: stopped";
+              } catch (error) {
+                console.error('Error stopping AFK Host and Player:', error);
+                return "Error: " + error.message;
+              }
+            })();
+          `).catch(err => console.error('Failed to stop AFK Host and Player:', err));
+        }
       });
-    }
-  }
-
-  executeDirectMovementScript(view, key, action) {
-    const type = action === 'press' ? 'keyDown' : 'keyUp';
-    
-    let keyCode = key;
-    if (key === ' ') {
-      keyCode = 'Space';
-    }
-    
-    if (view && view.webContents && !view.webContents.isDestroyed()) {
-      view.webContents.focus();
-      view.webContents.sendInputEvent({ type, keyCode });
     }
   }
 }

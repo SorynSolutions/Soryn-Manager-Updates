@@ -41,18 +41,20 @@ const files = glob.sync('**/*.js', { ignore: ['node_modules/**', 'dist/**'] });
 
 // Process each file
 files.forEach(file => {
-    const content = fs.readFileSync(file, 'utf8');
-    const obfuscatedCode = JavaScriptObfuscator.obfuscate(content, obfuscationOptions).getObfuscatedCode();
-    
-    // Create dist directory if it doesn't exist
-    const distDir = path.join('dist', path.dirname(file));
-    if (!fs.existsSync(distDir)) {
-        fs.mkdirSync(distDir, { recursive: true });
+    if (fs.statSync(file).isFile() && file.endsWith('.js')) {
+        const content = fs.readFileSync(file, 'utf8');
+        const obfuscatedCode = JavaScriptObfuscator.obfuscate(content, obfuscationOptions).getObfuscatedCode();
+        
+        // Create dist directory if it doesn't exist
+        const distDir = path.join('dist', path.dirname(file));
+        if (!fs.existsSync(distDir)) {
+            fs.mkdirSync(distDir, { recursive: true });
+        }
+        
+        // Write obfuscated code to dist directory
+        fs.writeFileSync(path.join('dist', file), obfuscatedCode);
+        console.log(`Obfuscated: ${file}`);
     }
-    
-    // Write obfuscated code to dist directory
-    fs.writeFileSync(path.join('dist', file), obfuscatedCode);
-    console.log(`Obfuscated: ${file}`);
 });
 
 console.log('Obfuscation complete!'); 

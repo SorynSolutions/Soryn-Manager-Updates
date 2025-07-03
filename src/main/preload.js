@@ -49,11 +49,4 @@ contextBridge.exposeInMainWorld('electronAPI', {
   
   // API to add a new bot
   addBot: () => ipcRenderer.send('add-bot'),
-  
-  // API for auto-updates
-  checkForUpdate: () => ipcRenderer.invoke('check-for-update'),
-  onUpdateAvailable: (callback) => ipcRenderer.on('update-available', callback),
-  onUpdateNotAvailable: (callback) => ipcRenderer.on('update-not-available', callback),
-  onUpdateError: (callback) => ipcRenderer.on('update-error', (event, message) => callback(message)),
-  onUpdateDownloadProgress: (callback) => ipcRenderer.on('update-download-progress', (event, progress) => callback(progress)),
 }); 
