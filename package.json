@@ -1,6 +1,6 @@
 {
   "name": "soryns-lobby-manager",
-  "version": "3.1.4",
+  "version": "3.1.7",
   "description": "Soryn's Lobby Manager",
   "main": "index.js",
   "scripts": {

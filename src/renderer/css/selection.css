@@ -12,7 +12,7 @@ body {
   justify-content: center;
   align-items: center;
   min-height: 100vh;
-  overflow: hidden;
+  overflow: auto;
 }
 
 .container {
@@ -22,6 +22,7 @@ body {
   width: 90%;
   max-width: 700px;
   z-index: 10;
+  /* Ensure container does not restrict height or hide overflow */
 }
 
 h1 {
@@ -336,4 +337,98 @@ input[type="range"]::-webkit-slider-thumb:hover {
     opacity: 0;
     transform: translateX(300px) translateY(300px);
   }
+}
+
+.game-cards {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 2rem;
+  justify-content: center;
+}
+
+.game-card {
+  flex: 1;
+  background: rgba(30, 41, 59, 0.5);
+  border: 2px solid #873efd;
+  border-radius: 12px;
+  padding: 1rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-align: center;
+  opacity: 0.7;
+  min-width: 120px;
+  max-width: 180px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.game-card.active {
+  box-shadow: 0 0 15px rgba(135, 62, 253, 0.5);
+  opacity: 1;
+  border-color: #cba6f7;
+}
+
+.game-card:hover:not(.coming-soon) {
+  transform: translateY(-5px);
+  opacity: 1;
+}
+
+.game-image {
+  width: 64px;
+  height: 64px;
+  background: #22223b;
+  border-radius: 8px;
+  margin-bottom: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.game-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 8px;
+}
+
+.game-title {
+  font-weight: 600;
+  color: #ffffff;
+  font-size: 1.1rem;
+  margin-bottom: 0.2rem;
+}
+
+.game-coming-soon {
+  font-size: 0.9rem;
+  color: #cdd6f4;
+  opacity: 0.7;
+}
+
+.game-card.coming-soon {
+  pointer-events: none;
+  opacity: 0.5;
+  border-style: dashed;
+} 
+
+/* Custom Scrollbar Styles */
+body::-webkit-scrollbar {
+  width: 12px;
+  background: #232347;
+  border-radius: 8px;
+}
+
+body::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, #873efd 40%, #a084fa 100%);
+  border-radius: 8px;
+  border: 2px solid #232347;
+}
+
+body::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(135deg, #a084fa 0%, #cba6f7 100%);
+}
+
+body::-webkit-scrollbar-corner {
+  background: #232347;
 } 

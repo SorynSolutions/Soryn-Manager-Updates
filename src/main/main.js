@@ -67,36 +67,32 @@ function createApplicationMenu() {
           }
         },
         {
-          label: 'Reset License',
+          label: 'Logout',
           click: () => {
-            if (licenseManager) {
-              // Clear license data
-              licenseManager.store.delete('licenseKey');
-              licenseManager.store.delete('licenseStatus');
-              // Show a confirmation message
-              const resetWindow = new BrowserWindow({
-                width: 300,
-                height: 150,
-                autoHideMenuBar: true,
-                resizable: false,
-                modal: true
-              });
-              resetWindow.loadURL(`data:text/html;charset=utf-8,
-                <html>
-                  <head>
-                    <style>
-                      body { font-family: sans-serif; padding: 20px; text-align: center; }
-                      button { margin-top: 15px; padding: 8px 15px; }
-                    </style>
-                  </head>
-                  <body>
-                    <h3>License reset</h3>
-                    <p>Restart the application to apply the changes.</p>
-                    <button onclick="window.close()">OK</button>
-                  </body>
-                </html>
-              `);
-            }
+            // REMOVED: License reset functionality - this was a security vulnerability
+            // Backend handles all session management and logout
+            const logoutWindow = new BrowserWindow({
+              width: 300,
+              height: 150,
+              autoHideMenuBar: true,
+              resizable: false,
+              modal: true
+            });
+            logoutWindow.loadURL(`data:text/html;charset=utf-8,
+              <html>
+                <head>
+                  <style>
+                    body { font-family: sans-serif; padding: 20px; text-align: center; }
+                    button { margin-top: 15px; padding: 8px 15px; }
+                  </style>
+                </head>
+                <body>
+                  <h3>Logout</h3>
+                  <p>Session cleared. Please restart the application to login again.</p>
+                  <button onclick="window.close()">OK</button>
+                </body>
+              </html>
+            `);
           }
         }
       ]
@@ -137,10 +133,12 @@ function createSelectionWindow() {
   });
 }
 
-// Check the license before starting the application
+// REMOVED: License check bypass - this was a critical security vulnerability
+// All license validation must go through the backend server
 async function checkLicense() {
-  // Skip license check and proceed with application
-  console.log('Skipping license check, starting application...');
+  // Backend handles all license validation
+  // This function only initializes the application after backend validation
+  console.log('Backend validation required - no client-side license checks');
   createSelectionWindow();
   createApplicationMenu();
   setupIPCHandlers();

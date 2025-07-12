@@ -14,6 +14,61 @@
       position: relative;
     }
 
+    /* Custom title bar styles */
+    #title-bar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 30px;
+      background: #1a1a2e;
+      -webkit-app-region: drag;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    #title-bar-text {
+      color: #ffffff;
+      font-size: 14px;
+      font-weight: 500;
+      text-align: center;
+      flex: 1;
+    }
+
+    #title-bar-controls {
+      position: absolute;
+      right: 0;
+      top: 0;
+      height: 100%;
+      display: flex;
+      -webkit-app-region: no-drag;
+    }
+
+    .title-bar-button {
+      width: 46px;
+      height: 30px;
+      background: transparent;
+      border: none;
+      color: #ffffff;
+      font-size: 12px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background-color 0.2s ease;
+    }
+
+    .title-bar-button:hover {
+      background-color: rgba(255, 255, 255, 0.1);
+    }
+
+    .title-bar-button.close:hover {
+      background-color: #e81123;
+    }
+
     body::before {
       content: '';
       position: absolute;
@@ -28,7 +83,7 @@
 
     .settings-container {
       max-width: 500px;
-      margin: 40px auto;
+      margin: 70px auto 40px auto; /* Increased top margin to account for title bar */
       background: rgba(30, 30, 46, 0.7); /* Semi-transparent dark background */
       backdrop-filter: blur(10px);
       border-radius: 12px;
@@ -152,6 +207,14 @@
   </style>
 </head>
 <body>
+  <!-- Custom title bar -->
+  <div id="title-bar">
+    <div id="title-bar-text">VPN/Video Settings</div>
+    <div id="title-bar-controls">
+      <button class="title-bar-button close" onclick="window.close()">✕</button>
+    </div>
+  </div>
+
   <div class="settings-container">
     <h1>VPN/Video Settings</h1>
     

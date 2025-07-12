@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background-color: #0f0f0f;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+    
+    .control-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: #873efd;
+      height: 30px;
+      color: white;
+      padding: 0 10px;
+      user-select: none;
+      margin-bottom: 8px;
+      margin-top: 0px;
+      padding-top: 0px;
+      padding-bottom: 0px;
+    }
+    
+    .title {
+      font-weight: bold;
+      font-size: 14px;
+    }
+    
+    #macro-container {
+      display: flex;
+      gap: 5px;
+    }
+    
+    .macro-btn, .panel-btn {
+      background: #111;
+      color: #fff;
+      border: 2px solid #fff;
+      border-radius: 8px;
+      padding: 3px 12px;
+      font-size: 13px;
+      font-weight: 500;
+      margin-left: 5px;
+      cursor: pointer;
+      transition: background 0.2s, box-shadow 0.2s;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+    }
+    
+    .macro-btn:hover, .panel-btn:hover {
+      background: #222;
+    }
+    
+    .macro-btn.active {
+      background: #22c55e;
+    }
+  </style>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      // Get the game mode from the URL parameters
+      const urlParams = new URLSearchParams(window.location.search);
+      const gameMode = urlParams.get('mode') || 'multiplayer';
+      
+      // Random movement macro configuration
+      const macro = { id: 'macro4', label: 'Random Movements', shortcut: 'ALT+M' };
+      
+      // Update the title based on the mode
+      document.getElementById('mode-title').textContent = 
+        gameMode === 'cdl' ? 'CDL Controls' : 'Multiplayer Controls';
+      
+      const macroContainer = document.getElementById('macro-container');
+      
+      // Create the macro button
+      const btn = document.createElement('button');
+      btn.id = macro.id;
+      btn.className = 'macro-btn';
+      btn.textContent = `${macro.label} (${macro.shortcut})`;
+      
+      btn.addEventListener('click', () => {
+        // Toggle active/inactive state
+        btn.classList.toggle('active');
+        const isActive = btn.classList.contains('active');
+        
+        // Send a message to the main process to execute or stop the macro
+        if (window.macroAPI) {
+          window.macroAPI.executeMacro(macro.id, gameMode);
+        }
+      });
+      
+      macroContainer.appendChild(btn);
+      
+      // Add a button to open the macro panel
+      const macroPanelBtn = document.createElement('button');
+      macroPanelBtn.className = 'panel-btn';
+      macroPanelBtn.textContent = 'Macro Panel';
+      macroPanelBtn.title = 'Open Macro Panel';
+      
+      macroPanelBtn.addEventListener('click', () => {
+        if (window.macroAPI) {
+          window.macroAPI.openMacroPanel(gameMode);
+        }
+      });
+      
+      macroContainer.appendChild(macroPanelBtn);
+      
+      // Add a button to open the sync panel
+      const syncPanelBtn = document.createElement('button');
+      syncPanelBtn.className = 'panel-btn';
+      syncPanelBtn.textContent = 'Sync Panel';
+      syncPanelBtn.title = 'Open Sync Panel';
+      
+      syncPanelBtn.addEventListener('click', () => {
+        if (window.macroAPI) {
+          window.macroAPI.openSyncPanel();
+        }
+      });
+      
+      macroContainer.appendChild(syncPanelBtn);
+      
+      // Add a button to open the settings
+      const settingsBtn = document.createElement('button');
+      settingsBtn.className = 'panel-btn';
+      settingsBtn.textContent = 'Settings';
+      settingsBtn.title = 'Open server settings';
+      
+      settingsBtn.addEventListener('click', () => {
+        if (window.macroAPI) {
+          window.macroAPI.openSettings();
+        }
+      });
+      
+      macroContainer.appendChild(settingsBtn);
+      
+      // Listen for macro status updates
+      if (window.macroAPI && window.macroAPI.onMacroStatus) {
+        window.macroAPI.onMacroStatus((status) => {
+          // Update the visual state of the button based on the status
+          if (status.macroId === 'macro4') {
+            const btn = document.getElementById('macro4');
+            if (btn) {
+              if (status.running === false) {
+                btn.classList.remove('active');
+              } else if (status.running === true) {
+                btn.classList.add('active');
+              }
+            }
+          }
+        });
+      }
+    });
+  </script>
+</head>
+<body>
+  <div class="control-bar">
+    <div id="mode-title" class="title">Multiplayer Controls</div>
+    <div id="macro-container"></div>
+  </div>
+</body>
+</html> 

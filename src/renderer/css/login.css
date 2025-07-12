@@ -58,7 +58,7 @@ h1 {
 .input-group {
     display: flex;
     flex-direction: column;
-    gap: 1.2rem;
+    gap: 0.4rem;
     width: 100%;
 }
 
@@ -122,4 +122,31 @@ h1 {
   font-size: 0.9em;
   min-height: 20px;
   text-align: center;
+}
+
+.checkbox-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  justify-content: center;
+  margin: 0.1rem auto;
+  width: fit-content;
+}
+
+.checkbox-group input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: #873efd;
+  cursor: pointer;
+}
+
+.checkbox-group label {
+  color: #cdd6f4;
+  font-size: 0.9rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.checkbox-group:hover label {
+  color: #a084fa;
 } 

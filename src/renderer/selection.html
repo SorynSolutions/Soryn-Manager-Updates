@@ -9,6 +9,22 @@
 </head>
 <body>
   <div class="container">
+    <h1>Select Game</h1>
+    <div class="game-cards">
+      <div class="game-card" data-game="mw3bo6">
+        <div class="game-image">
+          <img src="assets/mw3bo6.png" alt="MW3/BO6">
+        </div>
+        <div class="game-title">MW3 / BO6</div>
+      </div>
+      <div class="game-card coming-soon" data-game="bo7" style="pointer-events: none; opacity: 0.5;">
+        <div class="game-image">
+          <img src="assets/bo7.png" alt="BO7">
+        </div>
+        <div class="game-title">BO7</div>
+        <div class="game-coming-soon">(COMING SOON)</div>
+      </div>
+    </div>
     <h1>Select Game Mode</h1>
     
     <div class="config-form">
@@ -39,7 +55,7 @@
       
       <div class="form-group-slider">
           <label for="view-count">Number of Bots: </label>
-          <input type="range" class="form-control" id="view-count" min="1" max="44" value="4">
+          <input type="range" class="form-control" id="view-count" min="0" max="44" value="4">
           <span id="view-count-value">4</span>
       </div>
       <button id="start-button" class="btn-start" style="display: none;">Start Bots</button>

@@ -13,6 +13,10 @@
         <div class="input-group">
             <input type="text" id="licenseKey" placeholder="Enter License Key" autocomplete="off">
             <div id="errorMsg"></div>
+            <div class="checkbox-group">
+                <input type="checkbox" id="rememberKey" checked>
+                <label for="rememberKey">Remember License Key</label>
+            </div>
             <button class="btn login-btn" id="loginButton">Login</button>
             <button class="btn discord-btn" id="discordBtn">Join Discord</button>
         </div>
@@ -21,7 +25,8 @@
         const { ipcRenderer, shell } = require('electron');
         document.getElementById('loginButton').addEventListener('click', () => {
             const licenseKey = document.getElementById('licenseKey').value;
-            ipcRenderer.send('login-attempt', licenseKey);
+            const rememberKey = document.getElementById('rememberKey').checked;
+            ipcRenderer.send('login-attempt', licenseKey, rememberKey);
         });
         ipcRenderer.on('login-success', () => {
             // Handle successful login

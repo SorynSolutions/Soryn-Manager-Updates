@@ -2,7 +2,7 @@ const SorynAuthClient = require('./authClient');
 
 class Login {
     constructor() {
-        this.authClient = new SorynAuthClient('https://soryn-manager-updates.onrender.com');
+        this.authClient = new SorynAuthClient('https://backend-server-trhh.onrender.com');
     }
 
     async validateLicense(key) {

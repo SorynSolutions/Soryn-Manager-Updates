@@ -6,12 +6,52 @@ document.addEventListener('DOMContentLoaded', () => {
   const startButton = document.getElementById('start-button');
   const modeCards = document.querySelectorAll('.mode-card');
   const resetButton = document.getElementById('reset-button');
+  const gameCards = document.querySelectorAll('.game-card');
+
+  let selectedGame = null;
+  let selectedMode = null;
+
+  function updateStartButtonState() {
+    if (selectedGame && selectedMode) {
+      startButton.disabled = false;
+      startButton.style.display = 'block';
+    } else {
+      startButton.disabled = true;
+      startButton.style.display = 'none';
+    }
+  }
+
+  // Game card selection logic
+  gameCards.forEach(card => {
+    if (!card.classList.contains('coming-soon')) {
+      card.addEventListener('click', () => {
+        gameCards.forEach(c => c.classList.remove('active'));
+        card.classList.add('active');
+        selectedGame = card.dataset.game;
+        saveAllSettings();
+        updateStartButtonState();
+      });
+    }
+  });
+
+  // Mode card selection logic
+  modeCards.forEach(card => {
+    card.addEventListener('click', () => {
+      modeCards.forEach(c => c.classList.remove('active'));
+      card.classList.add('active');
+      gameModeSelect.value = card.dataset.mode;
+      selectedMode = card.dataset.mode;
+      saveAllSettings();
+      updateStartButtonState();
+    });
+  });
 
   // Function to save all settings
   function saveAllSettings() {
     try {
       const allSettings = {
-        gameMode: gameModeSelect.value,
+        gameMode: selectedMode,
+        game: selectedGame,
         viewCount: parseInt(viewCountInput.value)
       };
       localStorage.setItem('userSettings', JSON.stringify(allSettings));
@@ -24,17 +64,27 @@ document.addEventListener('DOMContentLoaded', () => {
   function loadSavedSettings() {
     try {
       const savedSettings = localStorage.getItem('userSettings');
+      // Always start with nothing selected
+      gameCards.forEach(c => c.classList.remove('active'));
+      modeCards.forEach(c => c.classList.remove('active'));
+      selectedGame = null;
+      selectedMode = null;
+      // Only restore view count if present
       if (savedSettings) {
         const settings = JSON.parse(savedSettings);
-        
-        // Apply saved view count
         if (settings.viewCount) {
           viewCountInput.value = settings.viewCount;
           viewCountValue.textContent = settings.viewCount;
         }
       }
+      updateStartButtonState();
     } catch (error) {
       console.error('Error loading settings:', error);
+      gameCards.forEach(c => c.classList.remove('active'));
+      modeCards.forEach(c => c.classList.remove('active'));
+      selectedGame = null;
+      selectedMode = null;
+      updateStartButtonState();
     }
   }
   
@@ -43,22 +93,6 @@ document.addEventListener('DOMContentLoaded', () => {
     viewCountInput.value = 1;
     viewCountValue.textContent = 1;
     saveAllSettings();
-  });
-
-  // Add event handlers for the cards
-  modeCards.forEach(card => {
-    card.addEventListener('click', () => {
-      // Remove the active class from all cards
-      modeCards.forEach(c => c.classList.remove('active'));
-      // Add the active class to the clicked card
-      card.classList.add('active');
-      // Update the select value
-      gameModeSelect.value = card.dataset.mode;
-      // Show the start button
-      startButton.style.display = 'block';
-      // Save the settings
-      saveAllSettings();
-    });
   });
 
   // Update the view count display
@@ -73,15 +107,17 @@ document.addEventListener('DOMContentLoaded', () => {
   
   // Start the session when the button is clicked
   startButton.addEventListener('click', () => {
+    if (!selectedGame || !selectedMode) return;
     const config = {
-      mode: gameModeSelect.value,
+      mode: selectedMode,
+      game: selectedGame,
       viewCount: parseInt(viewCountInput.value)
     };
     
     // Animate the button to show the click
     startButton.classList.add('clicked');
     
-    // Send only the basic config to the main process
+    // Send config to the main process
     window.electronAPI.startSession(config);
     
     // Reset the button animation after a delay
@@ -92,4 +128,5 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Initialize settings with saved or default values
   loadSavedSettings();
+  updateStartButtonState();
 }); 

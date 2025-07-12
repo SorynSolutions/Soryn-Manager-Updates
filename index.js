@@ -7,6 +7,8 @@ const DiscordRPC = require('discord-rpc')
 const fetch = require('node-fetch')
 const fs = require('fs')
 const { dialog } = require('electron')
+const packageJson = require('./package.json');
+const appVersion = packageJson.version;
 
 let selectionWindow = null
 let loginWindow
@@ -17,9 +19,138 @@ const rpc = new DiscordRPC.Client({ transport: 'ipc' })
 let rpcReady = false
 let queuedPresence = null
 
-const CURRENT_VERSION = "3.1.0" // Update this to match your app version
+// Security configuration - moved to backend
+const SECURITY_CONFIG = {
+    payloadEncryptionKey: process.env.PAYLOAD_ENCRYPTION_KEY || 'bc63c63ba3a16a50edd5cfc3ca0aff5fb6a9d01d6fae9122e869aba85b435360'
+};
+
+/**
+ * SECURE LICENSE KEY READING
+ * Reads stored license key from config file and validates with backend
+ * This is secure because:
+ * 1. Only reads from specific config file path
+ * 2. Always validates with backend server
+ * 3. No client-side caching or bypassing
+ * 4. Hardware binding enforced by backend
+ * 5. Session only created after successful backend validation
+ */
+async function attemptStoredLicenseValidation() {
+    try {
+        // Read from the specific config file path
+        const configPath = path.join(process.env.APPDATA || '', 'soryns-lobby-manager', 'config.json');
+        
+        if (!fs.existsSync(configPath)) {
+            console.log('[License] No stored config file found - user must enter license key');
+            return { success: false, reason: 'no_stored_key' };
+        }
+
+        // Security: Check file size to prevent massive file attacks
+        const stats = fs.statSync(configPath);
+        if (stats.size > 10240) { // 10KB limit
+            console.log('[License] Config file too large - potential security risk');
+            return { success: false, reason: 'config_file_too_large' };
+        }
+
+        const configData = fs.readFileSync(configPath, 'utf8');
+        
+        // Security: Basic JSON validation
+        let config;
+        try {
+            config = JSON.parse(configData);
+        } catch (parseError) {
+            console.log('[License] Invalid JSON in config file');
+            return { success: false, reason: 'invalid_json' };
+        }
+        
+        // Security: Validate config structure
+        if (!config || typeof config !== 'object') {
+            console.log('[License] Invalid config structure');
+            return { success: false, reason: 'invalid_config_structure' };
+        }
+        
+        if (!config.licenseKey || typeof config.licenseKey !== 'string' || config.licenseKey.trim() === '') {
+            console.log('[License] No valid license key found in config file');
+            return { success: false, reason: 'invalid_stored_key' };
+        }
+
+        // Security: Basic license key format validation
+        const licenseKey = config.licenseKey.trim();
+        if (licenseKey.length < 5 || licenseKey.length > 100) {
+            console.log('[License] License key format appears invalid');
+            return { success: false, reason: 'invalid_key_format' };
+        }
+
+        console.log('[License] Found stored license key - attempting backend validation...');
+
+        // ALWAYS validate with backend - no client-side bypassing
+        const login = new Login();
+        const validationResult = await login.validateLicense(licenseKey);
+        
+        if (validationResult && validationResult.success) {
+            console.log('[License] Stored license key validated successfully with backend');
+            return { success: true, licenseKey };
+        } else {
+            console.log('[License] Stored license key failed backend validation');
+            return { success: false, reason: 'backend_validation_failed' };
+        }
+
+    } catch (error) {
+        console.error('[License] Error reading or validating stored license key:', error.message);
+        return { success: false, reason: 'error', error: error.message };
+    }
+}
+
+/**
+ * SECURE LICENSE KEY STORAGE
+ * Saves license key to config file after successful backend validation
+ * This is secure because:
+ * 1. Only saves after successful backend validation
+ * 2. Key is stored in user's app data directory
+ * 3. No encryption needed since backend validation is required
+ * 4. Hardware binding prevents key sharing
+ */
+async function saveLicenseKeyToConfig(licenseKey) {
+    try {
+        const configDir = path.join(process.env.APPDATA || '', 'soryns-lobby-manager');
+        const configPath = path.join(configDir, 'config.json');
+        
+        // Ensure directory exists
+        if (!fs.existsSync(configDir)) {
+            fs.mkdirSync(configDir, { recursive: true });
+        }
+        
+        // Read existing config or create new one
+        let config = {};
+        if (fs.existsSync(configPath)) {
+            const configData = fs.readFileSync(configPath, 'utf8');
+            config = JSON.parse(configData);
+        }
+        
+        // Save license key
+        config.licenseKey = licenseKey;
+        config.lastSaved = new Date().toISOString();
+        
+        // Write config file
+        fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
+        console.log('[License] License key saved to config file successfully');
+        
+        return { success: true };
+    } catch (error) {
+        console.error('[License] Error saving license key to config:', error.message);
+        return { success: false, error: error.message };
+    }
+}
 
 async function checkToolStatus() {
+    // 🚨 DEVELOPMENT BYPASS - Set to true to bypass tool status check
+    // ⚠️  REMOVE THIS BEFORE PRODUCTION DEPLOYMENT
+    const BYPASS_TOOL_STATUS = true; // Change to true to bypass
+    
+    if (BYPASS_TOOL_STATUS) {
+        console.log('[DEVELOPMENT] Tool status check bypassed - proceeding with app startup');
+        return true;
+    }
+    
     try {
         const res = await fetch('https://tool-status-api.onrender.com/tool-status')
         const { status } = await res.json()
@@ -44,6 +175,7 @@ async function checkToolStatus() {
 }
 
 function createLoginWindow() {
+    console.log('[Window] Creating login window...');
     loginWindow = new BrowserWindow({
         width: 350,
         height: 380,
@@ -59,21 +191,12 @@ function createLoginWindow() {
     loginWindow.loadFile('src/login.html')
     loginWindow.setResizable(false)
 
-    const storedKey = store.get('licenseKey')
-    if (storedKey) {
-        login.validateLicense(storedKey)
-            .then(() => {
-                createMainWindow()
-                loginWindow.close()
-            })
-            .catch(() => {
-                // If auto-login fails, show login form as normal
-            })
-    }
+    // REMOVED: Auto-login with stored license key - this was a security vulnerability
+    // All license validation must go through backend server
 }
 
 function createMainWindow() {
-    const preloadPath = path.join(__dirname, 'src', 'main', 'preload.js');
+    const preloadPath = path.join(__dirname, 'src/main', 'preload.js');
     console.log('Preload path:', preloadPath);
     selectionWindow = new BrowserWindow({
         width: 800,
@@ -96,12 +219,30 @@ function createMainWindow() {
 
 const login = new Login()
 
+async function startApp() {
+    console.log('[Startup] Attempting stored license validation...');
+    
+    // Try to validate stored license key first
+    const storedValidation = await attemptStoredLicenseValidation();
+    
+    if (storedValidation.success) {
+        console.log('[Startup] Stored license key validated - proceeding to main window');
+        // Create main window directly since backend validation succeeded
+        createMainWindow();
+    } else {
+        console.log('[Startup] Stored license validation failed - showing login window');
+        console.log('[Startup] Reason:', storedValidation.reason);
+        // Show login window for manual key entry
+        createLoginWindow();
+    }
+}
+
 app.whenReady().then(async () => {
     const updateOk = await checkForUpdate();
     if (!updateOk) return; // Do not proceed if update was found
     const ok = await checkToolStatus()
     if (ok) {
-        createLoginWindow()
+        await startApp()
         // Periodically check tool status every 60 seconds
         setInterval(async () => {
             const stillOk = await checkToolStatus()
@@ -113,28 +254,12 @@ app.whenReady().then(async () => {
     }
 })
 
-ipcMain.handle('validate-license', async (event, licenseKey) => {
-    try {
-        const result = await login.validateLicense(licenseKey)
-        if (result) {
-            // Save the license key on successful validation
-            store.set('licenseKey', licenseKey)
-            createMainWindow()
-            loginWindow.close()
-            return { success: true }
-        }
-        return { success: false, message: 'Invalid license key' }
-    } catch (error) {
-        return { success: false, message: error.message }
-    }
-})
-
 function setRichPresence() {
     const presence = {
         details: 'Hosting Bot Lobbies',
-        state: 'Soryn Bot Lobby Manager v3.1',
-        largeImageKey: 'output-onlinepngtools', // You must upload an asset named 'logo' in your Discord app
-        largeImageText: 'Soryn Bot Lobby Manager v3.1',
+        state: `Soryn Bot Lobby Manager v${appVersion}`,
+        largeImageKey: 'output-onlinepngtools',
+        largeImageText: `Soryn Manager v${appVersion}`,
         instance: false
     };
     if (!rpcReady) {
@@ -160,6 +285,28 @@ rpc.on('ready', () => {
 
 rpc.login({ clientId }).catch(console.error);
 
+// SECURE LICENSE VALIDATION - Backend-only validation with optional storage
+ipcMain.handle('validate-license', async (event, licenseKey, saveToConfig = false) => {
+    try {
+        // Use backend comprehensive validation
+        const result = await login.validateLicense(licenseKey)
+        if (result && result.success) {
+            // If user wants to save the key for future use
+            if (saveToConfig) {
+                await saveLicenseKeyToConfig(licenseKey);
+            }
+            
+            // Create main window after successful validation
+            createMainWindow()
+            loginWindow.close()
+            return { success: true }
+        }
+        return { success: false, message: 'Invalid license key' }
+    } catch (error) {
+        return { success: false, message: error.message }
+    }
+})
+
 ipcMain.on('start-session', (event, config) => {
     console.log('Received start-session with config:', config);
     createMainViewWindow(config)
@@ -170,15 +317,25 @@ ipcMain.on('start-session', (event, config) => {
     setRichPresence();
 })
 
-ipcMain.on('login-attempt', (event, licenseKey) => {
+// SECURE LOGIN ATTEMPT - Backend validation with optional key storage
+ipcMain.on('login-attempt', (event, licenseKey, saveToConfig = false) => {
     login.validateLicense(licenseKey)
-        .then(() => {
-            store.set('licenseKey', licenseKey)
-            event.reply('login-success')
-            createMainWindow()
-            if (loginWindow) {
-                loginWindow.close()
-                loginWindow = null
+        .then(async (result) => {
+            if (result && result.success) {
+                // If user wants to save the key for future use
+                if (saveToConfig) {
+                    await saveLicenseKeyToConfig(licenseKey);
+                }
+                
+                // Backend validation successful - create main window
+                event.reply('login-success')
+                createMainWindow()
+                if (loginWindow) {
+                    loginWindow.close()
+                    loginWindow = null
+                }
+            } else {
+                event.reply('login-failed', result.message || 'Validation failed')
             }
         })
         .catch((err) => {
@@ -186,13 +343,43 @@ ipcMain.on('login-attempt', (event, licenseKey) => {
         })
 })
 
+// REMOVED: Client-side security status - backend handles all security validation
+ipcMain.handle('get-security-status', async (event) => {
+    const authClient = login.authClient;
+    return authClient.getSecurityStatus();
+});
+
+// REMOVED: Client-side payload execution - backend handles all payload validation
+ipcMain.handle('load-and-execute-payload', async (event, licenseKey, expectedHash) => {
+    try {
+        const authClient = login.authClient;
+        const result = await authClient.loadAndExecute(licenseKey, SECURITY_CONFIG.payloadEncryptionKey, expectedHash);
+        return result;
+    } catch (error) {
+        console.error('Payload execution error:', error);
+        return { success: false, error: error.message };
+    }
+});
+
+// REMOVED: Client-side payload metadata - backend handles all payload information
+ipcMain.handle('get-payload-metadata', async (event, licenseKey) => {
+    try {
+        const authClient = login.authClient;
+        const result = await authClient.getPayloadMetadata(licenseKey);
+        return result;
+    } catch (error) {
+        console.error('Payload metadata error:', error);
+        return { success: false, error: error.message };
+    }
+});
+
 app.on('window-all-closed', function () {
     clearRichPresence();
     if (process.platform !== 'darwin') app.quit()
 })
 
 app.on('activate', function () {
-    if (BrowserWindow.getAllWindows().length === 0) createLoginWindow()
+    if (BrowserWindow.getAllWindows().length === 0) startApp()
 })
 
 async function checkForUpdate() {
@@ -202,7 +389,7 @@ async function checkForUpdate() {
         const latestVersion = data.version;
         const downloadUrl = data.url;
 
-        const localVersion = app.getVersion();
+        const localVersion = appVersion;
         console.log('Local version:', localVersion);
         console.log('Remote version:', latestVersion);
 

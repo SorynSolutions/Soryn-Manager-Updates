@@ -184,6 +184,10 @@ class MainViewWindow {
     while (existingIndices.includes(nextIndex)) {
       nextIndex++;
     }
+    // If there are no views, ensure dimensions are calculated for at least 1 view
+    if (this.views.length === 0) {
+      this.calculateViewDimensions(this.viewsPerRow, 1);
+    }
     this.createBrowserView(nextIndex);
 
     // Find the newly created view and add it to the default synchronization group
@@ -1262,12 +1266,19 @@ class MainViewWindow {
       width: panelWidth,
       height: panelHeight,
       title: 'VPN/Video Settings',
+      titleBarStyle: 'hidden',
+      titleBarOverlay: {
+        color: '#1a1a2e',
+        symbolColor: '#ffffff',
+        height: 30
+      },
       icon: path.join(__dirname, '../renderer/assets/icons/icon.png'),
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
         preload: path.join(__dirname, 'preload.js')
-      }
+      },
+      backgroundColor: '#1a1a2e'
     });
 
     this.settingsWindow.loadFile(path.join(__dirname, '../renderer/settings.html'));
@@ -1801,7 +1812,11 @@ class MainViewWindow {
     });
     
     // Load xbox.com/EN-US/play
+    if (this.config.game === 'mw3bo6') {
     view.webContents.loadURL('https://www.xbox.com/en-US/play/launch/call-of-duty-black-ops-6---cross-gen-bundle/9PF528M6CRHQ');
+    } else if (this.config.game === 'bo7') {
+      view.webContents.loadURL('https://www.xbox.com/en-US/play/launch/call-of-duty-black-ops-7---cross-gen-bundle/PLACEHOLDER');
+    }
     
     // Open the DevTools in detached mode for each view
     //view.webContents.openDevTools({ mode: 'detach' });
@@ -1975,20 +1990,7 @@ class MainViewWindow {
       },
       { type: 'separator' },
       {
-        label: 'Synchronization panel',
-        click: () => {
-          this.openSyncPanel();
-        }
-      },
-      {
-        label: 'Macro panel',
-        click: () => {
-          this.openMacroPanel();
-        }
-      },
-      { type: 'separator' },
-      {
-        label: 'Settings',
+        label: 'VPN/Video Settings',
         click: () => {
           this.openSettings();
         }

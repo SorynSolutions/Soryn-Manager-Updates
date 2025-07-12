@@ -5,7 +5,7 @@ function injectBetterXcloudSettings() {
   try {
     console.log("Injection des paramètres BetterXcloud");
     
-    // Définir les paramètres principaux pour BetterXcloud
+    // Define the main parameters for BetterXcloud
     const settings = {
       "ui.imageQuality": 10,
       "ui.gameCard.waitTime.show": true,
@@ -46,7 +46,7 @@ function injectBetterXcloudSettings() {
       "ui.theme": "default"
     };
 
-    // Définir les paramètres spécifiques pour BetterXcloud.Stream
+    // Define the specific parameters for BetterXcloud.Stream
     const streamSettings = {
       "controller.pollingRate": 4,
       "deviceVibration.mode": "off",
@@ -76,7 +76,7 @@ function injectBetterXcloudSettings() {
       "mkb.p1.slot": 1
     };
 
-    // Sauvegarder les paramètres dans le localStorage
+    // Save the settings in localStorage
     localStorage.setItem("BetterXcloud", JSON.stringify(settings));
     localStorage.setItem("BetterXcloud.Stream", JSON.stringify(streamSettings));
     console.log("Paramètres injectés dans le localStorage:", settings);
@@ -85,7 +85,7 @@ function injectBetterXcloudSettings() {
   }
 }
 
-// Injecter Better X Cloud dès que possible
+// Inject Better X Cloud as soon as possible
 window.addEventListener('DOMContentLoaded', () => {
   console.log('DOMContentLoaded déclenché, injection forcée');
   

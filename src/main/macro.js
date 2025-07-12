@@ -13,7 +13,8 @@ class MacroManager {
       currentIndex: 0,
       lastDirection: null,
       recentMoves: [],
-      timeoutIds: []
+      timeoutIds: [],
+      randomMovementIntervalId: null
     };
     this.randomMovementTimeouts = [];
     this.randomMovementIntervalId = null;
@@ -229,7 +230,8 @@ class MacroManager {
         currentIndex: 0,
         lastDirection: null,
         recentMoves: [],
-        timeoutIds: []
+        timeoutIds: [],
+        randomMovementIntervalId: null
       };
       
       // Start the movement sequence
@@ -276,9 +278,14 @@ class MacroManager {
       this.randomMovementTimeouts = [];
     }
     
-    if (this.randomMovementIntervalId) {
-      clearInterval(this.randomMovementIntervalId);
-      this.randomMovementIntervalId = null;
+    if (this.centralMovementController.randomMovementIntervalId) {
+      clearInterval(this.centralMovementController.randomMovementIntervalId);
+      this.centralMovementController.randomMovementIntervalId = null;
+    }
+    
+    if (this.centralMovementController.randomMovementTimeoutId) {
+      clearTimeout(this.centralMovementController.randomMovementTimeoutId);
+      this.centralMovementController.randomMovementTimeoutId = null;
     }
     
     // Reset the controller state
@@ -312,77 +319,34 @@ class MacroManager {
   }
 
   /**
-   * Execute the initial jump sequence
+   * Execute the initial jump sequence (QWERTY: Space)
    */
   executeJumpSequence(jumpIndex) {
     if (!this.randomMovementActive || !this.centralMovementController.isRunning) {
       return;
     }
-    
+    if (jumpIndex >= 3) {
+      // After 3 jumps, start WASD movement
+      this.startRandomMovementLoop();
+      return;
+    }
     console.log(`Executing jump ${jumpIndex+1}/3`);
-    
-    // Get all synchronized views
     const synchronizedViews = this.mainWindow.getAllSynchronizedViews();
-    
-    // Execute the jump on all views with a simplified approach
     synchronizedViews.forEach(view => {
       if (view.webContents && !view.webContents.isDestroyed()) {
-        const script = `
-          (function() {
-            try {
-              const element = document.documentElement || document.body;
-              
-              // Simulate spacebar press
-              const downEvent = document.createEvent('HTMLEvents');
-              downEvent.initEvent('keydown', true, true);
-              downEvent.key = ' ';
-              downEvent.code = 'Space';
-              downEvent.keyCode = 32;
-              element.dispatchEvent(downEvent);
-              
-              // Release after 100ms
-              setTimeout(() => {
-                const upEvent = document.createEvent('HTMLEvents');
-                upEvent.initEvent('keyup', true, true);
-                upEvent.key = ' ';
-                upEvent.code = 'Space';
-                upEvent.keyCode = 32;
-                element.dispatchEvent(upEvent);
-              }, 100);
-              
-              return "Simple jump executed";
-            } catch(error) {
-              return "Jump error: " + error.message;
-            }
-          })();
-        `;
-        
-        view.webContents.executeJavaScript(script)
-          .then(result => console.log(`View ${view.viewNumber}: ${result}`))
-          .catch(err => {
-            console.error(`Jump error in view ${view.viewNumber}:`, err);
-            // Try the direct approach in case of failure
-            this.executeDirectMovement(view, [' '], 100);
-          });
+        view.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Space', code: 'Space', key: ' ' });
+        setTimeout(() => {
+          view.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Space', code: 'Space', key: ' ' });
+          console.log(`View ${view.viewNumber}: Simple jump executed`);
+          // After releasing, schedule the next jump
+          if (view === synchronizedViews[synchronizedViews.length - 1]) {
+            setTimeout(() => {
+              this.executeJumpSequence(jumpIndex + 1);
+            }, 200); // 200ms between jumps
+          }
+        }, 100);
       }
     });
-    
-    // Continue with the next jump or move to movements
-    if (jumpIndex < 2) {
-      // Wait 200ms before the next jump
-      const nextJumpId = setTimeout(() => {
-        this.executeJumpSequence(jumpIndex + 1);
-      }, 200);
-      
-      this.centralMovementController.timeoutIds.push(nextJumpId);
-    } else {
-      // Move to random movements after 3 jumps
-      const startMovementsId = setTimeout(() => {
-        this.executeRandomMovement();
-      }, 800);
-      
-      this.centralMovementController.timeoutIds.push(startMovementsId);
-    }
   }
 
   /**
@@ -418,7 +382,6 @@ class MacroManager {
     if (!this.randomMovementActive || !this.centralMovementController.isRunning) {
       return;
     }
-
     // QWERTY directions
     const directions = [
       ['w'],      // Forward
@@ -430,12 +393,10 @@ class MacroManager {
       ['s', 'a'], // Diagonal backward-left
       ['s', 'd']  // Diagonal backward-right
     ];
-
     try {
       // 1. Randomly shuffle directions and pick one
       let shuffled = this.shuffleArray(directions);
       let chosen = shuffled[0];
-
       // 2. Occasionally skip or repeat a key (simulate human error)
       if (Math.random() < 0.1) {
         // 10% chance to skip a movement
@@ -447,70 +408,56 @@ class MacroManager {
         }
       }
       this.centralMovementController.lastDirection = chosen;
-
       // 3. Randomize key hold duration (300–900ms)
       const pressDuration = this.getRandomInt(300, 900);
-
       // 4. Execute the movement on all synchronized views
       const synchronizedViews = this.mainWindow.getAllSynchronizedViews();
       synchronizedViews.forEach(view => {
         if (view.webContents && !view.webContents.isDestroyed()) {
-          const script = `
-            (function() {
-              try {
-                const simulateKeyEvent = (type, key) => {
-                  const element = document.documentElement || document.body;
-                  const event = document.createEvent('HTMLEvents');
-                  event.initEvent(type, true, true);
-                  event.key = key;
-                  event.code = key === ' ' ? 'Space' :
-                                key === 'Shift' ? 'ShiftLeft' :
-                                'Key' + (key === 'w' ? 'W' :
-                                          key === 'a' ? 'A' :
-                                          key === 's' ? 'S' :
-                                          key === 'd' ? 'D' : key.toUpperCase());
-                  event.keyCode = key === ' ' ? 32 :
-                                  key === 'Shift' ? 16 :
-                                  key.charCodeAt(0);
-                  event.shiftKey = key === 'Shift' || keys.includes('Shift');
-                  element.dispatchEvent(event);
-                };
-                // Press the keys
-                const keys = ${JSON.stringify(chosen)};
-                keys.forEach(key => simulateKeyEvent('keydown', key));
-                // Release after the delay
-                setTimeout(() => {
-                  keys.forEach(key => simulateKeyEvent('keyup', key));
-                }, ${pressDuration});
-                return "Humanized movement executed";
-              } catch (error) {
-                return "Error: " + error.message;
-              }
-            })();
-          `;
-          view.webContents.executeJavaScript(script)
-            .then(result => console.log(`View ${view.viewNumber}: ${result}`))
-            .catch(err => {
-              console.error(`Error in view ${view.viewNumber}:`, err);
-              this.executeDirectMovement(view, chosen, pressDuration);
+          console.log('Random movement chosen keys:', chosen);
+          // QWERTY: WASD
+          chosen.forEach(key => {
+            const keyMap = {
+              'w': { key: 'w', code: 'KeyW', keyCode: 87 },
+              'a': { key: 'a', code: 'KeyA', keyCode: 65 },
+              's': { key: 's', code: 'KeyS', keyCode: 83 },
+              'd': { key: 'd', code: 'KeyD', keyCode: 68 }
+            };
+            const k = keyMap[key];
+            if (!k) {
+              console.warn('Skipping invalid key in random movement:', key);
+              return;
+            }
+            // Only use the required property for Electron
+            view.webContents.sendInputEvent({
+              type: 'keyDown',
+              keyCode: k.key
             });
+          });
+          setTimeout(() => {
+            chosen.forEach(key => {
+              const keyMap = {
+                'w': { key: 'w', code: 'KeyW', keyCode: 87 },
+                'a': { key: 'a', code: 'KeyA', keyCode: 65 },
+                's': { key: 's', code: 'KeyS', keyCode: 83 },
+                'd': { key: 'd', code: 'KeyD', keyCode: 68 }
+              };
+              const k = keyMap[key];
+              if (!k) {
+                console.warn('Skipping invalid key in random movement:', key);
+                return;
+              }
+              view.webContents.sendInputEvent({
+                type: 'keyUp',
+                keyCode: k.key
+              });
+            });
+            console.log(`View ${view.viewNumber}: Humanized movement executed`);
+          }, pressDuration);
         }
       });
-
-      // 5. Schedule the next movement with a random delay (1.2–3.5s)
-      const nextDelay = this.getRandomInt(1200, 3500);
-      const nextMovementId = setTimeout(() => {
-        this.executeRandomMovement();
-      }, nextDelay);
-      this.centralMovementController.timeoutIds.push(nextMovementId);
-
     } catch (error) {
-      console.error('Error in central random movement:', error);
-      // In case of error, try to continue after a delay
-      const errorRecoveryId = setTimeout(() => {
-        this.executeRandomMovement();
-      }, 2000);
-      this.centralMovementController.timeoutIds.push(errorRecoveryId);
+      console.error('Error in humanized random movement:', error);
     }
   }
 
@@ -556,31 +503,20 @@ class MacroManager {
             clickCount: 1
           });
           
-          // AZERTY mapping for fallback
-          const keyMapping = {
-            'z': 'w',
-            'q': 'a',
-            's': 's',
-            'd': 'd',
-            'Shift': 'Shift'
-          };
-          
-          // Send keyboard events directly via IPC
+          // QWERTY mapping only
           keys.forEach(key => {
-            const mappedKey = keyMapping[key] || key;
             this.mainWindow.mainWebContents.send('simulate-keypress', {
               viewId: view.viewNumber,
-              key: mappedKey,
+              key: key,
               state: 'down'
             });
           });
           
           setTimeout(() => {
             keys.forEach(key => {
-              const mappedKey = keyMapping[key] || key;
               this.mainWindow.mainWebContents.send('simulate-keypress', {
                 viewId: view.viewNumber,
-                key: mappedKey,
+                key: key,
                 state: 'up'
               });
             });
@@ -653,7 +589,7 @@ class MacroManager {
 
   /**
    * Macro 6: AFK Host (Movement on Hosts)
-   * Executes a sequence of ZQSD keys in order then DSQZ in reverse order
+   * Executes a sequence of WASD keys in order then DSAW in reverse order
    * Each key is held for 1 second with a 2 second pause between each key
    */
   toggleAfkHost(views) {
@@ -682,9 +618,9 @@ class MacroManager {
       const executeAfkMovement = () => {
         if (!this.afkHostActive) return;
         
-        // Key sequence in order then in reverse
-        const forwardKeys = ['z', 'q', 's', 'd'];
-        const reverseKeys = ['d', 's', 'q', 'z'];
+        // Key sequence in order then in reverse (QWERTY)
+        const forwardKeys = ['w', 'a', 's', 'd'];
+        const reverseKeys = ['d', 's', 'a', 'w'];
         const allKeys = [...forwardKeys, ...reverseKeys];
         
         const executeKeySequence = (keyIndex) => {
@@ -702,7 +638,7 @@ class MacroManager {
                     setTimeout(() => {
                       window.releaseKey('${currentKey}');
                       console.log('AFK Host: Released ${currentKey}');
-                    }, 1500); // Increased from 1000ms to 1500ms hold
+                    }, 1500); // 1500ms hold
                     return "AFK Host: movement executed on key ${currentKey}";
                   } catch (error) {
                     console.error('Error executing AFK Host:', error);
@@ -713,7 +649,7 @@ class MacroManager {
             }
           });
           
-          // Move to the next key after 1.6 seconds (reduced delay between keys)
+          // Move to the next key after 1.6 seconds
           setTimeout(() => {
             executeKeySequence(keyIndex + 1);
           }, 1600);
@@ -745,8 +681,8 @@ class MacroManager {
           view.webContents.executeJavaScript(`
             (function() {
               try {
-                // Release all possible keys
-                ['z', 'q', 's', 'd'].forEach(key => {
+                // Release all possible keys (QWERTY)
+                ['w', 'a', 's', 'd'].forEach(key => {
                   window.releaseKey(key);
                 });
                 console.log('AFK Host: All keys released');
@@ -764,7 +700,7 @@ class MacroManager {
 
   /**
    * Macro 7: AFK Player (Movement on Players)
-   * Executes random ZQSD keys for 0.6 seconds every 1 second
+   * Executes random WASD keys for 0.6 seconds every 1 second
    * Records the last 4 movements and replays them in reverse order
    */
   toggleAfkPlayer(views) {
@@ -797,8 +733,8 @@ class MacroManager {
       const executeAfkMovement = () => {
         if (!this.afkPlayerActive) return;
         
-        // Possible keys
-        const possibleKeys = ['z', 'q', 's', 'd'];
+        // Possible keys (QWERTY)
+        const possibleKeys = ['w', 'a', 's', 'd'];
         
         // If in replay mode, use recorded moves in reverse order
         if (isReplayingMoves && lastMoves.length > 0) {
@@ -826,39 +762,34 @@ class MacroManager {
                       setTimeout(() => {
                         window.releaseKey('${currentKey}');
                         console.log('AFK Player Replay: Released ${currentKey}');
-                      }, 1100); // Increased from 600ms to 1100ms hold
+                      }, 1100); // 1100ms hold
                       return "AFK Player Replay: movement executed on key ${currentKey}";
                     } catch (error) {
                       console.error('Error executing AFK Player Replay:', error);
                       return "Error: " + error.message;
                     }
                   })();
-                `).catch(err => console.error(`Failed to execute AFK Player replay movement for key ${currentKey}:`, err));
+                `).catch(err => {
+                  console.error('Error executing JavaScript in AFK Player Replay:', err);
+                });
               }
             });
-            
-            // Move to the next move after 1.2 seconds (reduced delay between moves)
-            setTimeout(() => {
-              replayMove(index + 1);
-            }, 1200);
           };
           
-          // Start replaying moves
+          // Start replaying
           replayMove(0);
-          
         } else {
-          // Normal mode: select a random key
+          // Record the current moves
+          lastMoves = [];
+          isReplayingMoves = false;
+          
+          // Possible keys (QWERTY)
+          const possibleKeys = ['w', 'a', 's', 'd'];
+          
+          // Randomly select a key
           const randomKey = possibleKeys[Math.floor(Math.random() * possibleKeys.length)];
           
-          // Record this move
-          lastMoves.push(randomKey);
-          // Keep only the last 4 moves
-          if (lastMoves.length > 4) {
-            lastMoves.shift();
-          }
-          
-          console.log('AFK Player: Executing key', randomKey, '- Recorded moves:', lastMoves);
-          
+          // Execute the movement
           playerViews.forEach(view => {
             if (view.webContents && !view.webContents.isDestroyed()) {
               view.webContents.executeJavaScript(`
@@ -869,24 +800,19 @@ class MacroManager {
                     setTimeout(() => {
                       window.releaseKey('${randomKey}');
                       console.log('AFK Player: Released ${randomKey}');
-                    }, 1100); // Increased from 600ms to 1100ms hold
+                    }, 600); // 0.6 seconds hold
                     return "AFK Player: movement executed on key ${randomKey}";
                   } catch (error) {
                     console.error('Error executing AFK Player:', error);
                     return "Error: " + error.message;
                   }
                 })();
-              `).catch(err => console.error(`Failed to execute AFK Player movement for key ${randomKey}:`, err));
+              `).catch(err => console.error('Error executing JavaScript in AFK Player:', err));
             }
           });
           
-          // If we have recorded 4 moves, switch to replay mode for the next cycle
-          if (lastMoves.length === 4 && !isReplayingMoves) {
-            isReplayingMoves = true;
-          }
-          
-          // Schedule the next move after 1.2 seconds (reduced delay between moves)
-          this.afkPlayerTimeoutId = setTimeout(executeAfkMovement, 1200);
+          // Schedule the next movement
+          setTimeout(executeAfkMovement, 1000);
         }
       };
       
@@ -907,8 +833,8 @@ class MacroManager {
           view.webContents.executeJavaScript(`
             (function() {
               try {
-                // Release all possible keys
-                ['z', 'q', 's', 'd'].forEach(key => {
+                // Release all possible keys (QWERTY)
+                ['w', 'a', 's', 'd'].forEach(key => {
                   window.releaseKey(key);
                 });
                 console.log('AFK Player: All keys released');
@@ -924,284 +850,17 @@ class MacroManager {
     }
   }
 
-  /**
-   * Macro 8: AFK Host and Player (Movement on Hosts and Players)
-   * Executes a sequence of touches ZQSD in order then DSQZ in reverse order
-   * Each touch is held for 1 second with a pause of 2 seconds between each touch
-   * Press V every 3 seconds on players and automatically restarts every 60 seconds
-   */
-  toggleAfkHostAndPlayer(views) {
-    if (!views || views.length === 0) return;
-    
-    console.log('Toggle de la macro AFK Host and Player');
-    
-    // Identify hosts and players
-    const hostViews = views.filter(view => view.viewType === 'host');
-    const playerViews = views.filter(view => view.viewType === 'player');
-    
-    if (hostViews.length === 0 && playerViews.length === 0) {
-      console.log('Aucun host ou player visible pour exécuter la macro AFK Host and Player');
-      return;
-    }
-    
-    // Check if the macro is already active
-    this.afkHostActive = !this.afkHostActive;
-    this.afkPlayerActive = !this.afkPlayerActive;
-    
-    // Update the visual status
-    this.mainWindow.updateControlBarMacroStatus(8, this.afkHostActive && this.afkPlayerActive);
-    
-    if (this.afkHostActive && this.afkPlayerActive) {
-      console.log('Starting AFK movements on hosts and players');
-      
-      // Store interval IDs for later cleanup
-      this.vKeyPressIntervalIds = [];
-      this.autoCompleteRestartId = null;
-      
-      // Function to start macro functionality
-      const startAfkFunctionality = () => {
-        // Clean up existing intervals to avoid duplicates during restart
-        this.cleanupIntervals();
-        
-        // Start periodic press on V key only for players
-        playerViews.forEach(view => {
-          if (view.webContents && !view.webContents.isDestroyed()) {
-            const intervalId = setInterval(() => {
-              if (!this.afkHostActive || !this.afkPlayerActive) return;
-              
-              view.webContents.executeJavaScript(`
-                (function() {
-                  try {
-                    console.log('AFK Host+Player: Pressing V (player)');
-                    window.pressKey('v');
-                    setTimeout(() => {
-                      window.releaseKey('v');
-                      console.log('AFK Host+Player: Released V (player)');
-                    }, 600); // Increased from 100ms to 600ms hold
-                    return "AFK Host+Player: V press executed";
-                  } catch (error) {
-                    console.error('Error executing V press:', error);
-                    return "Error: " + error.message;
-                  }
-                })();
-              `).catch(err => console.error('Failed to execute V key press on player:', err));
-            }, 2000); // Reduced from 3000ms to 2000ms interval
-            
-            this.vKeyPressIntervalIds.push(intervalId);
-          }
-        });
-        
-        // Function to execute key sequence
-        const executeAfkMovement = () => {
-          if (!this.afkHostActive || !this.afkPlayerActive) return;
-          
-          // Key sequence in order then in reverse
-          const forwardKeys = ['z', 'q', 's', 'd'];
-          const reverseKeys = ['d', 's', 'q', 'z'];
-          const allKeys = [...forwardKeys, ...reverseKeys];
-          
-          const executeKeySequence = (keyIndex) => {
-            if (keyIndex >= allKeys.length || !this.afkHostActive || !this.afkPlayerActive) return;
-            
-            const currentKey = allKeys[keyIndex];
-            
-            hostViews.forEach(view => {
-              if (view.webContents && !view.webContents.isDestroyed()) {
-                view.webContents.executeJavaScript(`
-                  (function() {
-                    try {
-                      console.log('AFK Host and Player: Pressing ${currentKey}');
-                      window.pressKey('${currentKey}');
-                      setTimeout(() => {
-                        window.releaseKey('${currentKey}');
-                        console.log('AFK Host and Player: Released ${currentKey}');
-                      }, 1500); // Increased from 1000ms to 1500ms hold
-                      return "AFK Host and Player: movement executed on key ${currentKey}";
-                    } catch (error) {
-                      console.error('Error executing AFK Host and Player:', error);
-                      return "Error: " + error.message;
-                    }
-                  })();
-                `).catch(err => console.error(`Failed to execute AFK Host and Player movement for key ${currentKey}:`, err));
-              }
-            });
-            
-            playerViews.forEach(view => {
-              if (view.webContents && !view.webContents.isDestroyed()) {
-                view.webContents.executeJavaScript(`
-                  (function() {
-                    try {
-                      console.log('AFK Host and Player: Pressing ${currentKey}');
-                      window.pressKey('${currentKey}');
-                      setTimeout(() => {
-                        window.releaseKey('${currentKey}');
-                        console.log('AFK Host and Player: Released ${currentKey}');
-                      }, 1500); // Increased from 1000ms to 1500ms hold
-                      return "AFK Host and Player: movement executed on key ${currentKey}";
-                    } catch (error) {
-                      console.error('Error executing AFK Host and Player:', error);
-                      return "Error: " + error.message;
-                    }
-                  })();
-                `).catch(err => console.error(`Failed to execute AFK Host and Player movement for key ${currentKey}:`, err));
-              }
-            });
-            
-            // Move to the next key after 1.6 seconds (reduced delay between keys)
-            setTimeout(() => {
-              executeKeySequence(keyIndex + 1);
-            }, 1600);
-          };
-          
-          // Start key sequence
-          executeKeySequence(0);
-          
-          // Schedule the next full sequence
-          if (this.afkHostActive && this.afkPlayerActive) {
-            this.afkHostTimeoutId = setTimeout(executeAfkMovement, 1600); // Reduced from 3000ms
-          }
-        };
-        
-        // Start the movements
-        executeAfkMovement();
-      };
-      
-      // Configure complete automatic restart every 60 seconds
-      this.autoCompleteRestartId = setInterval(() => {
-        if (this.afkHostActive && this.afkPlayerActive) {
-          console.log('Complete automatic restart of AFK Host+Player macro (every 60 seconds)');
-          
-          // Stop all intervals and timers
-          this.cleanupIntervals();
-          
-          // Reset flags to simulate complete deactivation
-          const wasActive = this.afkHostActive && this.afkPlayerActive;
-          this.afkHostActive = false;
-          this.afkPlayerActive = false;
-          
-          // Release all keys in host and player views
-          const allViews = [...hostViews, ...playerViews];
-          allViews.forEach(view => {
-            if (view.webContents && !view.webContents.isDestroyed()) {
-              view.webContents.executeJavaScript(`
-                (function() {
-                  try {
-                    // Release all possible keys
-                    ['z', 'q', 's', 'd', 'v'].forEach(key => {
-                      window.releaseKey(key);
-                    });
-                    return "AFK Host and Player: keys released for complete restart";
-                  } catch (error) {
-                    console.error('Error releasing keys:', error);
-                    return "Error: " + error.message;
-                  }
-                })();
-              `).catch(err => console.error('Failed to release keys:', err));
-            }
-          });
-          
-          // Simulate complete restart after a short pause
-          setTimeout(() => {
-            if (wasActive) {
-              // Reactivate flags
-              this.afkHostActive = true;
-              this.afkPlayerActive = true;
-              
-              // Update the visual status
-              this.mainWindow.updateControlBarMacroStatus(8, true);
-              
-              console.log('Complete restart of AFK Host+Player macro');
-              
-              // Restart all functionality
-              startAfkFunctionality();
-            }
-          }, 500); // Short pause to simulate user click
-        }
-      }, 60000); // Complete restart every 60 seconds
-      
-      // Method to clean up existing intervals and timeouts
-      this.cleanupIntervals = () => {
-        // Stop timeouts
-        if (this.afkHostTimeoutId) {
-          clearTimeout(this.afkHostTimeoutId);
-          this.afkHostTimeoutId = null;
-        }
-        
-        // Stop all V press intervals
-        if (this.vKeyPressIntervalIds && this.vKeyPressIntervalIds.length > 0) {
-          this.vKeyPressIntervalIds.forEach(intervalId => clearInterval(intervalId));
-          this.vKeyPressIntervalIds = [];
-        }
-        
-        // Release all keys in host and player views
-        const allViews = [...hostViews, ...playerViews];
-        allViews.forEach(view => {
-          if (view.webContents && !view.webContents.isDestroyed()) {
-            view.webContents.executeJavaScript(`
-              (function() {
-                try {
-                  // Release all possible keys
-                  ['z', 'q', 's', 'd', 'v'].forEach(key => {
-                    window.releaseKey(key);
-                  });
-                  return "AFK Host and Player: keys released for restart";
-                } catch (error) {
-                  console.error('Error releasing keys:', error);
-                  return "Error: " + error.message;
-                }
-              })();
-            `).catch(err => console.error('Failed to release keys:', err));
-          }
-        });
-      };
-      
-      // Start AFK functionality
-      startAfkFunctionality();
-      
-    } else {
-      console.log('Stopping AFK movements on hosts and players');
-      
-      // Stop timeouts
-      if (this.afkHostTimeoutId) {
-        clearTimeout(this.afkHostTimeoutId);
-        this.afkHostTimeoutId = null;
-      }
-      
-      // Stop complete automatic restart interval
-      if (this.autoCompleteRestartId) {
-        clearInterval(this.autoCompleteRestartId);
-        this.autoCompleteRestartId = null;
-      }
-      
-      // Stop all V press intervals
-      if (this.vKeyPressIntervalIds && this.vKeyPressIntervalIds.length > 0) {
-        this.vKeyPressIntervalIds.forEach(intervalId => clearInterval(intervalId));
-        this.vKeyPressIntervalIds = [];
-      }
-      
-      // Release all keys in host and player views
-      const allViews = [...hostViews, ...playerViews];
-      allViews.forEach(view => {
-        if (view.webContents && !view.webContents.isDestroyed()) {
-          view.webContents.executeJavaScript(`
-            (function() {
-              try {
-                // Release all possible keys
-                ['z', 'q', 's', 'd', 'v'].forEach(key => {
-                  window.releaseKey(key);
-                });
-                console.log('AFK Host and Player: All keys released');
-                return "AFK Host and Player: stopped";
-              } catch (error) {
-                console.error('Error stopping AFK Host and Player:', error);
-                return "Error: " + error.message;
-              }
-            })();
-          `).catch(err => console.error('Failed to stop AFK Host and Player:', err));
-        }
-      });
-    }
+  startRandomMovementLoop() {
+    if (!this.randomMovementActive || !this.centralMovementController.isRunning) return;
+    const doNext = () => {
+      if (!this.randomMovementActive || !this.centralMovementController.isRunning) return;
+      this.executeRandomMovement();
+      // Randomize interval between 3 and 5 seconds
+      const nextDelay = this.getRandomInt(3000, 5000);
+      this.centralMovementController.randomMovementTimeoutId = setTimeout(doNext, nextDelay);
+    };
+    doNext();
   }
 }
 
-module.exports = MacroManager; 
+module.exports = MacroManager;
