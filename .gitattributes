@@ -1,4 +1,7 @@
 *.exe filter=lfs diff=lfs merge=lfs -text
+<<<<<<< HEAD
 *.rar filter=lfs diff=lfs merge=lfs -text
 backend/payloads/* filter=lfs diff=lfs merge=lfs -text
 *.enc filter=lfs diff=lfs merge=lfs -text
+=======
+>>>>>>> 5d9324ffe11774c96892adc22fc2f8be17d42608
